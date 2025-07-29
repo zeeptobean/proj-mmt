@@ -54,11 +54,6 @@ class ClientSession {
     std::atomic<bool> active;
 
     ClientSession(const int& _socket, const sockaddr_in& _clientAddress) : socket(_socket), clientAddress(_clientAddress) {
-        // Set socket to non-blocking mode
-        u_long nonBlocking = 1;
-        ioctlsocket(socket, FIONBIO, &nonBlocking);
-
-        ShutdownController::getInstance().registerResource();
         init();
     }
 
@@ -67,11 +62,10 @@ class ClientSession {
 
     ~ClientSession() {
         if(active) {
-            shutdown(socket, SD_BOTH);
-            closesocket(socket);
             active = false;
         }
-        ShutdownController::getInstance().unregisterResource();
+        shutdown(socket, SD_BOTH);
+        closesocket(socket);
     }
 
     std::string getClientIp() const {
@@ -163,122 +157,155 @@ class ClientVector {
     }
 } clientVector;
 
-
+//why this is outside class
 void clientListener(ClientSession *ptr) {
-    ShutdownController::getInstance().registerResource();
-
-    fd_set readSet;
-    timeval timeout;
     int ret = 0;
-
     while(ptr->active.load()) {
-        // Setup select() parameters
-        FD_ZERO(&readSet);
-        FD_SET(ptr->getClientSocket(), &readSet);
-        timeout.tv_sec = 1;  // Check every second
-        timeout.tv_usec = 0;
-
-        // Wait for socket activity or timeout
-        ret = select(0, &readSet, nullptr, nullptr, &timeout);
-        
-        if (ret == SOCKET_ERROR) {
-            // Error occurred
-            ptr->active = false;
+        ret = recv(ptr->getClientSocket(), ptr->buf, BufferSize, 0);
+        if(ret > 0) {
+            continue;
+        } else if(ret == 0) {
+            fprintf(stderr, "Client %s disconnected gracefully\n", ptr->getClientIpPort().c_str());
+            ptr->active = 0;
             break;
-        } else if (ret == 0) {
-            // Timeout occurred - check shutdown flag
-            if (ShutdownController::getInstance().isShutdownRequested()) {
-                ptr->active = false;
+        } else if(ret < 0) {
+            if (WSAGetLastError() != WSAEWOULDBLOCK) {
+                fprintf(stderr, "is server force disconnecting?\n");
                 break;
             }
-            continue;
-        }
-
-        // Data available to read
-        ret = recv(ptr->getClientSocket(), ptr->buf, BufferSize, 0);
-        if(ret <= 0) {
-            // Connection closed or error
-            ptr->active = false;
+            fprintf(stderr, "Client %s disconnected abruptedly. error\n", ptr->getClientIpPort().c_str());
+            ptr->active = 0;
             break;
         }
     }
-
     ptr->active.store(false);
-    ShutdownController::getInstance().unregisterResource();
 }
 
-bool isInvalidAddress(sockaddr_in* addr) {
-    // Filter 0.0.0.0:0
-    if (addr->sin_addr.s_addr == 0 && addr->sin_port == 0) return true;
-    
-    // Filter broadcast addresses
-    if (addr->sin_addr.s_addr == INADDR_BROADCAST) return true;
+class ServerConnectionManager {
+private:
+    std::atomic<int> socketfile{-1};
+    std::atomic<bool> running{false};
+    std::vector<std::unique_ptr<ThreadWrapper>> clientThreads;
 
-    return false;
-}
+    bool isInvalidAddress(sockaddr_in* addr) {
+        // Filter 0.0.0.0:0
+        if (addr->sin_addr.s_addr == 0 && addr->sin_port == 0) return true;
+        
+        // Filter broadcast addresses
+        if (addr->sin_addr.s_addr == INADDR_BROADCAST) return true;
 
-void socketLoop() {
-    ShutdownController::getInstance().registerResource();
-
-    int socketfile = -1;
-    sockaddr_in sa;
-    int iResult;
-
-    // Create socket
-    socketfile = (int) socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (socketfile == -1) {
-        printf("socket failed: %d\n", WSAGetLastError());
-        return;
+        return false;
     }
 
-    //set reusable
-    int setsockopt_opt = 1;
-    setsockopt(socketfile, SOL_SOCKET, SO_REUSEADDR, (const char*) &setsockopt_opt, sizeof(setsockopt_opt));
-
-    memset(&sa, 0, sizeof(sa));
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(DEFAULT_PORT);
-    sa.sin_addr.s_addr = htonl(INADDR_ANY);
-
-    //bind
-    if ((iResult = bind(socketfile, (sockaddr*) &sa, sizeof(sa))) == SOCKET_ERROR) {
-        printf("bind failed: %d\n", WSAGetLastError());
-        closesocket(socketfile);
-        return;
-    }
-
-    // Listen
-    if ((iResult = listen(socketfile, SOMAXCONN)) == SOCKET_ERROR) {
-        printf("listen failed: %d\n", WSAGetLastError());
-        closesocket(socketfile);
-        return;
-    }
-
-    printf("server init\n");
-    while(!ShutdownController::getInstance().isShutdownRequested()) {
+    void acceptClientLoop() {
         sockaddr_in incomingAddress;
         const int incomingAddressSize = sizeof(incomingAddress);
         int incomingSocket = (int) accept(socketfile, (sockaddr*) &incomingAddress, const_cast<int*>(&incomingAddressSize));
+        if(incomingSocket == -1) return;
         if(isInvalidAddress(&incomingAddress)) closesocket(incomingSocket);
         ClientSession *clientInstance = new ClientSession(incomingSocket, incomingAddress);
         printf("client %s connected!\n", clientInstance->getClientIpPort().c_str());
         clientVector.pushBack(clientInstance);
 
-        ThreadWrapper th (clientListener, clientInstance);
+        ThreadWrapper th(clientListener, clientInstance);
     }
 
-    // Force close all client sessions during shutdown
-    for(int i = 0; i < clientVector.size(); i++) {
-        clientVector[i]->active = false;
-        shutdown(clientVector[i]->getClientSocket(), SD_BOTH);
-        closesocket(clientVector[i]->getClientSocket());
-    }
-    clientVector.removeClosed();
+public:
+    void init() {
+        puts("Server init");
+        int newSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (newSocket == -1) {
+            running.store(false);
+            // throw std::runtime_error("socket failed");
+        }
+        int reuse = 1;
+        setsockopt(newSocket, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
 
-    shutdown(socketfile, SD_BOTH);
-    closesocket(socketfile);
-    ShutdownController::getInstance().unregisterResource();
-}
+        sockaddr_in sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sin_family = AF_INET;
+        sa.sin_port = htons(DEFAULT_PORT);
+        sa.sin_addr.s_addr = htonl(INADDR_ANY);
+
+        if (bind(newSocket, (sockaddr*)&sa, sizeof(sa)) == -1) {
+            closesocket(newSocket);
+            running.store(false);
+            // throw std::runtime_error("bind failed");
+        }
+
+        if (listen(newSocket, SOMAXCONN) == SOCKET_ERROR) {
+            closesocket(newSocket);
+            running.store(false);
+            // throw std::runtime_error("listen failed");
+        }
+
+        socketfile.store(newSocket);
+        running.store(true);
+
+        ThreadWrapper looper(ServerConnectionManager::acceptClientLoop, this);
+    }
+
+    ServerConnectionManager() {
+        // init();
+    }
+
+    ~ServerConnectionManager() {
+        disconnect();
+    }
+
+    void disconnect() {
+        if (!running.load()) return;
+        int currentSocket = socketfile.load();
+        if(currentSocket != -1) {
+            shutdown(currentSocket, SD_BOTH);
+            closesocket(currentSocket);
+        }
+        
+        socketfile.store(-1);
+        running.store(false);
+    }
+
+    void sendData(ClientSession *c, const std::string& tstr) {
+        int sent = send(c->getClientSocket(), tstr.c_str(), (int)tstr.size(), 0);
+        if(sent != (int) tstr.size()) {
+            fprintf(stderr, "Failed to send complete message to %s\n", c->getClientIpPort().c_str());
+        }
+    }
+
+    void run() {
+        running = true;
+
+        while (running) {
+            sockaddr_in incomingAddress;
+            int incomingAddressSize = sizeof(incomingAddress);
+            int incomingSocket = accept(socketfile, (sockaddr*)&incomingAddress, &incomingAddressSize);
+
+            if (incomingSocket == INVALID_SOCKET) {
+                if (WSAGetLastError() == WSAEINTR || !running) {
+                    break; // Shutdown requested
+                }
+                continue;
+            }
+
+            if (isInvalidAddress(&incomingAddress)) {
+                closesocket(incomingSocket);
+                continue;
+            }
+
+            ClientSession* clientInstance = new ClientSession(incomingSocket, incomingAddress);
+            clientVector.pushBack(clientInstance);
+
+            clientThreads.emplace_back(
+                std::make_unique<ThreadWrapper>(clientListener, clientInstance)
+            );
+            clientThreads.back()->run();
+        }
+
+    
+    }
+};
+
+ServerConnectionManager connectionManager;
 
 void RunGui() {
     ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -293,29 +320,24 @@ void RunGui() {
     for(int i=0; i < clientVector.size(); i++) {
         auto& ref = clientVector[i];
 
-        // ImGui::PushID(ref->getClientSocket());
         if(ImGui::CollapsingHeader(ref->getClientIpPort().c_str())) {
             ImGui::Text("Connected for: %s", ref->getConnectionDuration().c_str());
-            // if(ref->isBufferUpdated()) {
-                static std::string localInput;
-                std::string displayData(ref->buf, strnlen(ref->buf, BufferSize));
-                ImGui::InputTextMultiline(ref->makeWidgetName("Received Data").c_str(), 
-                    const_cast<char*>(displayData.c_str()), displayData.size() + 1, 
-                    ImVec2(-1, 100), ImGuiInputTextFlags_ReadOnly);
-                ImGui::InputText(ref->makeWidgetName("Send to client").c_str(), &localInput);
-                if(ImGui::Button(ref->makeWidgetName("Send").c_str()) && !localInput.empty()) {
-                    ThreadWrapper sendThread([](ClientSession *c, const std::string& tstr) {
-                        int sent = send(c->getClientSocket(), tstr.c_str(), (int)tstr.size(), 0);
-                        if(sent != tstr.size()) {
-                            fprintf(stderr, "Failed to send complete message to %s\n", 
-                                   c->getClientIpPort().c_str());
-                        }
-                    }, ref, localInput);
+            static std::string localInput;
+            std::string displayData(ref->buf, strnlen(ref->buf, BufferSize));
+            ImGui::InputTextMultiline(ref->makeWidgetName("Received Data").c_str(), 
+                const_cast<char*>(displayData.c_str()), displayData.size() + 1, 
+                ImVec2(-1, 100), ImGuiInputTextFlags_ReadOnly);
+            ImGui::InputText(ref->makeWidgetName("Send to client").c_str(), &localInput);
+            if(ImGui::Button(ref->makeWidgetName("Send").c_str()) && !localInput.empty()) {
+                ThreadWrapper sendThread([](ClientSession *c, std::string& tstr) {
+                    connectionManager.sendData(c, tstr);
                     localInput.clear();
-                }
-            // }
+                }, ref, localInput);
+            }
+            if(ImGui::Button(ref->makeWidgetName("Kick").c_str())) {
+                ref->active.store(false);
+            }
         }
-        // ImGui::PopID();
     }
     ImGui::SeparatorText("System");
     ImGui::Text("Average FPS: %d", (int) roundf(io.Framerate));
@@ -334,12 +356,11 @@ void RunSFMLBackend() {
     io.IniFilename = nullptr;
 
     sf::Clock deltaClock;
-    while (window.isOpen() && !ShutdownController::getInstance().isShutdownRequested()) {
+    while (window.isOpen()) {
         sf::Event event;
         while (window.pollEvent(event)) {
             ImGui::SFML::ProcessEvent(window, event);
             if (event.type == sf::Event::Closed) {
-                ShutdownController::getInstance().requestShutdown();
                 window.close();
             }
         }
@@ -358,6 +379,10 @@ void RunSFMLBackend() {
     ImGui::SFML::Shutdown();
 }
 
+void checkVector() {
+
+}
+
 int main(void) {
     WSADATA wsaData;
     // Initialize Winsock
@@ -366,13 +391,15 @@ int main(void) {
         return 1;
     }
 
-    ThreadWrapper socketThread(socketLoop);
-    socketThread.run();
-    RunSFMLBackend();
+    connectionManager.init();
 
-    ShutdownController::getInstance().requestShutdown();
-    ShutdownController::getInstance().waitForShutdown();
+    try {
+        RunSFMLBackend();
+    } catch (const std::exception& e) {
+        std::cerr << "Fatal error: " << e.what() << std::endl;
+    }
 
+    connectionManager.disconnect();
     WSACleanup();
     return 0;
 }
