@@ -166,15 +166,14 @@ void clientListener(ClientSession *ptr) {
             continue;
         } else if(ret == 0) {
             fprintf(stderr, "Client %s disconnected gracefully\n", ptr->getClientIpPort().c_str());
-            ptr->active = 0;
+            // ptr->active.store(false);
             break;
         } else if(ret < 0) {
             if (WSAGetLastError() != WSAEWOULDBLOCK) {
                 fprintf(stderr, "is server force disconnecting?\n");
-                break;
             }
             fprintf(stderr, "Client %s disconnected abruptedly. error\n", ptr->getClientIpPort().c_str());
-            ptr->active = 0;
+            // ptr->active.store(false);
             break;
         }
     }
@@ -185,7 +184,6 @@ class ServerConnectionManager {
 private:
     std::atomic<int> socketfile{-1};
     std::atomic<bool> running{false};
-    std::vector<std::unique_ptr<ThreadWrapper>> clientThreads;
 
     bool isInvalidAddress(sockaddr_in* addr) {
         // Filter 0.0.0.0:0
@@ -200,14 +198,16 @@ private:
     void acceptClientLoop() {
         sockaddr_in incomingAddress;
         const int incomingAddressSize = sizeof(incomingAddress);
-        int incomingSocket = (int) accept(socketfile, (sockaddr*) &incomingAddress, const_cast<int*>(&incomingAddressSize));
-        if(incomingSocket == -1) return;
-        if(isInvalidAddress(&incomingAddress)) closesocket(incomingSocket);
-        ClientSession *clientInstance = new ClientSession(incomingSocket, incomingAddress);
-        printf("client %s connected!\n", clientInstance->getClientIpPort().c_str());
-        clientVector.pushBack(clientInstance);
+        while(running.load()) {
+            int incomingSocket = (int) accept(socketfile, (sockaddr*) &incomingAddress, const_cast<int*>(&incomingAddressSize));
+            if(incomingSocket == -1) continue;  //skip?
+            if(isInvalidAddress(&incomingAddress)) closesocket(incomingSocket);
+            ClientSession *clientInstance = new ClientSession(incomingSocket, incomingAddress);
+            printf("client %s connected!\n", clientInstance->getClientIpPort().c_str());
+            clientVector.pushBack(clientInstance);
 
-        ThreadWrapper th(clientListener, clientInstance);
+            ThreadWrapper th(clientListener, clientInstance);
+        }
     }
 
 public:
@@ -271,38 +271,6 @@ public:
             fprintf(stderr, "Failed to send complete message to %s\n", c->getClientIpPort().c_str());
         }
     }
-
-    void run() {
-        running = true;
-
-        while (running) {
-            sockaddr_in incomingAddress;
-            int incomingAddressSize = sizeof(incomingAddress);
-            int incomingSocket = accept(socketfile, (sockaddr*)&incomingAddress, &incomingAddressSize);
-
-            if (incomingSocket == INVALID_SOCKET) {
-                if (WSAGetLastError() == WSAEINTR || !running) {
-                    break; // Shutdown requested
-                }
-                continue;
-            }
-
-            if (isInvalidAddress(&incomingAddress)) {
-                closesocket(incomingSocket);
-                continue;
-            }
-
-            ClientSession* clientInstance = new ClientSession(incomingSocket, incomingAddress);
-            clientVector.pushBack(clientInstance);
-
-            clientThreads.emplace_back(
-                std::make_unique<ThreadWrapper>(clientListener, clientInstance)
-            );
-            clientThreads.back()->run();
-        }
-
-    
-    }
 };
 
 ServerConnectionManager connectionManager;
@@ -336,6 +304,7 @@ void RunGui() {
             }
             if(ImGui::Button(ref->makeWidgetName("Kick").c_str())) {
                 ref->active.store(false);
+                clientVector.removeClosed();
             }
         }
     }

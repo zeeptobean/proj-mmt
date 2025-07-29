@@ -1,4 +1,5 @@
 #define WIN32_LEAN_AND_MEAN
+#define UNICODE
 #ifdef WIN32
 #include <windows.h>
 #include <winsock2.h>
@@ -251,7 +252,13 @@ void RunSFMLBackend() {
     ImGui::SFML::Shutdown();
 }
 
-int main() {
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLine, int nCmdShow) {
+    //Attach console for debugging
+    if (AttachConsole(ATTACH_PARENT_PROCESS) || AllocConsole()) {
+        freopen("CONOUT$", "w", stdout);
+        freopen("CONOUT$", "w", stderr);
+    }
+    
     // Initialize Winsock
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {

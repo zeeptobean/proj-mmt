@@ -14,17 +14,42 @@ class ThreadWrapper {
     private:
     std::thread thread_;
     std::promise<void> startPromise_;
-    bool didRun = false;
+    std::atomic<bool> didRun{false};
 
     public:
     ThreadWrapper(const ThreadWrapper&) = delete;
     ThreadWrapper& operator=(const ThreadWrapper&) = delete;
 
+    ThreadWrapper() noexcept = default;
+
+    ThreadWrapper(ThreadWrapper&& rhs) noexcept 
+        : thread_(std::move(rhs.thread_)),
+          startPromise_(std::move(rhs.startPromise_)),
+          didRun(rhs.didRun.load()) 
+    {
+        rhs.didRun.store(false);
+    }
+
+    // Move assignment operator
+    ThreadWrapper& operator=(ThreadWrapper&& rhs) noexcept {
+        if (this != &rhs) {
+            if (thread_.joinable()) {
+                thread_.detach();
+            }
+            
+            thread_ = std::move(rhs.thread_);
+            startPromise_ = std::move(rhs.startPromise_);
+            didRun.store(rhs.didRun.load());
+            rhs.didRun.store(false);
+        }
+        return *this;
+    }
+
     bool run() noexcept {
-        if(didRun) return false;
+        if(didRun.load()) return false;
         startPromise_.set_value();
-        didRun = true;
-        return didRun;
+        didRun.store(true);
+        return true;
     }
 
     template <typename F, typename... Args>
@@ -34,8 +59,6 @@ class ThreadWrapper {
             std::apply(f_, args_);  //c++17
         }, startPromise_.get_future());
     }
-
-    ThreadWrapper(ThreadWrapper&& rhs) noexcept : thread_(std::move(rhs.thread_)) {}
 
     ~ThreadWrapper() {
         if(thread_.joinable()) {
