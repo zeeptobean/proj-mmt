@@ -31,11 +31,10 @@ sf::SoundBuffer connectedSoundBuffer, disconnectedSoundBuffer;
 sf::Sound connectedSound, disconnectedSound;
 
 std::mutex socketMutex;
-std::atomic<bool> globalShutdownFlag(false);
 
 std::string inputBuffer;
 
-class ConnectionManager {
+class ClientConnectionManager {
 private:
     std::atomic<int> socketfile{-1};
     std::atomic<bool> connecting{false};
@@ -83,7 +82,7 @@ public:
         connecting.store(true);
         
         std::lock_guard<std::mutex> lock(socketMutex);
-        SOCKET newSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+        int newSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (newSocket == INVALID_SOCKET) {
             connecting.store(false);
             return false;
@@ -109,7 +108,7 @@ public:
         connecting.store(false);
         connected.store(true);
 
-        ThreadWrapper messageThread (&ConnectionManager::listenToServer, this);
+        ThreadWrapper messageThread (&ClientConnectionManager::listenToServer, this);
         messageThread.run();
 
         return true;
@@ -133,18 +132,18 @@ public:
         if (!connected.load()) return -1;
 
         std::lock_guard<std::mutex> lock(socketMutex);
-        SOCKET currentSocket = socketfile.load();
+        int currentSocket = socketfile.load();
         if (currentSocket == -1) return -1;
 
-        return send(currentSocket, data, length, 0);
+        return send(currentSocket, data, (int) length, 0);
     }
 
-    ~ConnectionManager() {
+    ~ClientConnectionManager() {
         disconnect();
     }
 };
 
-ConnectionManager connectionManager;
+ClientConnectionManager connectionManager;
 
 void RunGui() {
     ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -196,7 +195,6 @@ void RunGui() {
         }
 
         ImGui::SeparatorText("Received Messages");
-        // Get and display received messages
         if (ImGui::BeginChild("Messages", ImVec2(-1, 150), true)) {
             ImGui::TextWrapped("%s", buf);
         }
@@ -219,13 +217,13 @@ void RunSFMLBackend() {
 
     // Load sound resources with error checking
     try {
-        if (!connectedSoundBuffer.loadFromFile("CONNECTED.ogg")) {
-            throw std::runtime_error("Failed to load CONNECTED.ogg");
+        if (!connectedSoundBuffer.loadFromFile("asset/CONNECTED.ogg")) {
+            throw std::runtime_error("Failed to load asset/CONNECTED.ogg");
         }
         connectedSound.setBuffer(connectedSoundBuffer);
         
-        if (!disconnectedSoundBuffer.loadFromFile("DISCONNECTED.ogg")) {
-            throw std::runtime_error("Failed to load DISCONNECTED.ogg");
+        if (!disconnectedSoundBuffer.loadFromFile("asset/DISCONNECTED.ogg")) {
+            throw std::runtime_error("Failed to load asset/DISCONNECTED.ogg");
         }
         disconnectedSound.setBuffer(disconnectedSoundBuffer);
     } catch (const std::exception& e) {
@@ -233,13 +231,12 @@ void RunSFMLBackend() {
     }
 
     sf::Clock deltaClock;
-    while (window.isOpen() && !globalShutdownFlag) {
+    while (window.isOpen()) {
         sf::Event event;
         while (window.pollEvent(event)) {
             ImGui::SFML::ProcessEvent(window, event);
             if (event.type == sf::Event::Closed) {
                 window.close();
-                globalShutdownFlag = true;
             }
         }
 
@@ -251,8 +248,6 @@ void RunSFMLBackend() {
         window.display();
     }
 
-    // Cleanup
-    connectionManager.disconnect();
     ImGui::SFML::Shutdown();
 }
 
