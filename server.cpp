@@ -36,7 +36,6 @@ std::map<std::string, uint32_t> clientNamingPool;
 class ClientSession {
     int socket;
     sockaddr_in clientAddress;
-    char *oldbuf = nullptr;
     std::string clientIp;
     uint16_t clientPort;
     std::chrono::system_clock::time_point connectionTime;
@@ -47,10 +46,35 @@ class ClientSession {
         clientIp = std::string(tmp);
         clientPort = ntohs(clientAddress.sin_port);
         connectionTime = std::chrono::system_clock::now();
+        ThreadWrapper th (ClientSession::clientListener, this);
+    }
+
+    void clientListener() {
+        int ret = 0;
+        while(this->active.load()) {
+            ret = recv(this->getClientSocket(), this->outputBuffer, BufferSize, 0);
+            this->outputBuffer[ret] = 0;
+            if(ret > 0) {
+                continue;
+            } else if(ret == 0) {
+                fprintf(stderr, "Client %s disconnected gracefully\n", this->getClientIpPort().c_str());
+                break;
+            } else if(ret < 0) {
+                /*
+                if (WSAGetLastError() != WSAEWOULDBLOCK) {
+                    fprintf(stderr, "is server force disconnecting?\n");
+                }
+                */
+                fprintf(stderr, "Client %s disconnected abruptedly. error\n", this->getClientIpPort().c_str());
+                break;
+            }
+        }
+        this->active.store(false);
     }
 
     public:
-    char buf[BufferSize+3];
+    char outputBuffer[BufferSize+3];
+    std::string inputBuffer;
     std::atomic<bool> active;
 
     ClientSession(const int& _socket, const sockaddr_in& _clientAddress) : socket(_socket), clientAddress(_clientAddress) {
@@ -83,25 +107,6 @@ class ClientSession {
     int getClientSocket() const {
         return socket;
     }
-
-    /*
-    bool isBufferUpdated() {
-        if(oldbuf == nullptr) {
-            oldbuf = new char[BufferSize+3];
-            memset(oldbuf, 0, BufferSize+3);
-            strncpy(oldbuf, buf, BufferSize);
-            return true;
-        } else {
-            if(strcmp(buf, oldbuf) != 0) {
-                memset(oldbuf, 0, BufferSize+3);
-                strncpy(oldbuf, buf, BufferSize);
-                return true;
-            } else {
-                return false;
-            }
-        }
-    }
-    */
 
     std::string getConnectionDuration() const {
         auto now = std::chrono::system_clock::now();
@@ -157,29 +162,6 @@ class ClientVector {
     }
 } clientVector;
 
-//why this is outside class
-void clientListener(ClientSession *ptr) {
-    int ret = 0;
-    while(ptr->active.load()) {
-        ret = recv(ptr->getClientSocket(), ptr->buf, BufferSize, 0);
-        if(ret > 0) {
-            continue;
-        } else if(ret == 0) {
-            fprintf(stderr, "Client %s disconnected gracefully\n", ptr->getClientIpPort().c_str());
-            // ptr->active.store(false);
-            break;
-        } else if(ret < 0) {
-            if (WSAGetLastError() != WSAEWOULDBLOCK) {
-                fprintf(stderr, "is server force disconnecting?\n");
-            }
-            fprintf(stderr, "Client %s disconnected abruptedly. error\n", ptr->getClientIpPort().c_str());
-            // ptr->active.store(false);
-            break;
-        }
-    }
-    ptr->active.store(false);
-}
-
 class ServerConnectionManager {
 private:
     std::atomic<int> socketfile{-1};
@@ -205,8 +187,6 @@ private:
             ClientSession *clientInstance = new ClientSession(incomingSocket, incomingAddress);
             printf("client %s connected!\n", clientInstance->getClientIpPort().c_str());
             clientVector.pushBack(clientInstance);
-
-            ThreadWrapper th(clientListener, clientInstance);
         }
     }
 
@@ -290,17 +270,16 @@ void RunGui() {
 
         if(ImGui::CollapsingHeader(ref->getClientIpPort().c_str())) {
             ImGui::Text("Connected for: %s", ref->getConnectionDuration().c_str());
-            static std::string localInput;
-            std::string displayData(ref->buf, strnlen(ref->buf, BufferSize));
+            std::string displayData(ref->outputBuffer, strnlen(ref->outputBuffer, BufferSize));
             ImGui::InputTextMultiline(ref->makeWidgetName("Received Data").c_str(), 
                 const_cast<char*>(displayData.c_str()), displayData.size() + 1, 
                 ImVec2(-1, 100), ImGuiInputTextFlags_ReadOnly);
-            ImGui::InputText(ref->makeWidgetName("Send to client").c_str(), &localInput);
-            if(ImGui::Button(ref->makeWidgetName("Send").c_str()) && !localInput.empty()) {
-                ThreadWrapper sendThread([](ClientSession *c, std::string& tstr) {
-                    connectionManager.sendData(c, tstr);
-                    localInput.clear();
-                }, ref, localInput);
+            ImGui::InputText(ref->makeWidgetName("Send to client").c_str(), &clientVector[i]->inputBuffer);
+            if(ImGui::Button(ref->makeWidgetName("Send").c_str()) && !clientVector[i]->inputBuffer.empty()) {
+                ThreadWrapper sendThread([](ClientSession *c) {
+                    connectionManager.sendData(c, c->inputBuffer);
+                    c->inputBuffer.clear();
+                }, ref);
             }
             if(ImGui::Button(ref->makeWidgetName("Kick").c_str())) {
                 ref->active.store(false);
