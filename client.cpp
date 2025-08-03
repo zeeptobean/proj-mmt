@@ -21,6 +21,8 @@
 #include <bits/stdc++.h>
 #include "ThreadWrapper.hpp"
 #include "ImGuiStdString.hpp"
+#include "GuiScrollableText.hpp"
+#include "Message.hpp"
 using namespace std;
 
 #define DEFAULT_BUFLEN 2048
@@ -40,23 +42,41 @@ private:
     std::atomic<int> socketfile{-1};
     std::atomic<bool> connecting{false};
     std::atomic<bool> connected{false};
-    std::mutex messageMutex;
-    std::condition_variable messageCV;
     std::queue<std::string> receivedMessages;
     
     void listenToServer() {
         while (connected.load()) {
-            // memset(buf, 0, sizeof(buf));
+            memset(buf, 0, sizeof(buf));
             int bytesReceived = recv(socketfile.load(), buf, BufferSize, 0);
-            
+            buf[bytesReceived] = '\0';
             if (bytesReceived > 0) {
-                buf[bytesReceived] = '\0';
-                {
-                    std::lock_guard<std::mutex> lock(messageMutex);
+                int status = proceedEncryptedMessage(this->outputBuffer, ret, fullData, lastDataRemainingSize, nonce, NULL);
+                if(!crypt.checkOtherPublicKeyStatus()) {
+                    if(status == 2) {
+                        std::array<uint8_t, 32> outkey;
+                        for(int i=0; i < 32; i++) outkey[i] = fullData[i];
+                        crypt.setOtherPublicKey(outkey);
+                    } else {
+                        miniConsole.AddLineWarning("Client %s haven't send their key, can't proceed data", this->getClientIpPort().c_str());
+                    }
+                } else {
+                    if(status == 2) {
+                        miniConsole.AddLineInfo("Client %s want to reauth, but not implemented", this->getClientIpPort().c_str());
+                    } else {
+                        miniConsole.AddLine("Client %s sent data, remaining need to be sent: %d", this->getClientIpPort().c_str(), lastDataRemainingSize);
+                        if(lastDataRemainingSize == 0) {
+                            miniConsole.AddLine("Client %s complete sent data", this->getClientIpPort().c_str());
+                            std::vector<uint8_t> plainText;
+                            Message msg;
+                            crypt.decrypt(fullData, nonce, plainText);
+                            ret = assembleMessage((char*) plainText.data(), plainText.size(), msg);
+                            if(!ret) {
+                                miniConsole.AddLineError("Client %s can't setup message", this->getClientIpPort().c_str());
+                            }
+                        }
+                    }
                 }
-                messageCV.notify_one();
-            }
-            else if (bytesReceived == 0) {
+            } else if (bytesReceived == 0) {
                 // Connection closed
                 connected.store(false);
                 break;
@@ -176,26 +196,7 @@ void RunGui() {
         }
     }
     if (connectionManager.isConnected()) {
-        ImGui::SeparatorText("Send Data");
-        bool sendRequested = false;
-        sendRequested |= ImGui::InputText("Message", &inputBuffer, 
-                                         ImGuiInputTextFlags_EnterReturnsTrue);
-        sendRequested |= ImGui::Button("Send");
-        
-        if (sendRequested && inputBuffer.size() > 0) {
-            ThreadWrapper t1([]{
-                int result = connectionManager.sendData(inputBuffer.data(), (int) inputBuffer.size());
-                if (result > 0) {
-                    inputBuffer = "";
-                } else {
-                    // Handle send error
-                    // connectionManager.disconnect();
-                }
-            });
-            t1.run();
-        }
-
-        ImGui::SeparatorText("Received Messages");
+        ImGui::SeparatorText("Raw messages received");
         if (ImGui::BeginChild("Messages", ImVec2(-1, 150), true)) {
             ImGui::TextWrapped("%s", buf);
         }
@@ -254,10 +255,12 @@ void RunSFMLBackend() {
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLine, int nCmdShow) {
     //Attach console for debugging
+    /*
     if (AttachConsole(ATTACH_PARENT_PROCESS) || AllocConsole()) {
         freopen("CONOUT$", "w", stdout);
         freopen("CONOUT$", "w", stderr);
     }
+    */
     
     // Initialize Winsock
     WSADATA wsaData;

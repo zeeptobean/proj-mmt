@@ -23,7 +23,9 @@
 #include <bits/stdc++.h>
 #include "ImGuiStdString.hpp"
 #include "ThreadWrapper.hpp"
-#include "ShutdownController.hpp"
+#include "Message.hpp"
+#include "GuiScrollableText.hpp"
+#include "CryptEngine.hpp"
 
 using namespace std;
 
@@ -32,6 +34,10 @@ using namespace std;
 const int BufferSize = 2048;
 
 std::map<std::string, uint32_t> clientNamingPool;
+
+ScrollableTextDisplay miniConsole;
+
+CryptEngine crypt;
 
 class ClientSession {
     int socket;
@@ -50,22 +56,50 @@ class ClientSession {
     }
 
     void clientListener() {
-        int ret = 0;
+        std::vector<uint8_t> fullData;
+        int lastDataRemainingSize = 0;
+        std::array<uint8_t, 12> nonce;
+
         while(this->active.load()) {
-            ret = recv(this->getClientSocket(), this->outputBuffer, BufferSize, 0);
+            int ret = recv(this->getClientSocket(), this->outputBuffer, BufferSize, 0);
             this->outputBuffer[ret] = 0;
             if(ret > 0) {
-                continue;
+                int status = proceedEncryptedMessage(this->outputBuffer, ret, fullData, lastDataRemainingSize, nonce, NULL);
+                if(!crypt.checkOtherPublicKeyStatus()) {
+                    if(status == 2) {
+                        std::array<uint8_t, 32> outkey;
+                        for(int i=0; i < 32; i++) outkey[i] = fullData[i];
+                        crypt.setOtherPublicKey(outkey);
+                    } else {
+                        miniConsole.AddLineWarning("Client %s haven't send their key, can't proceed data", this->getClientIpPort().c_str());
+                    }
+                } else {
+                    if(status == 2) {
+                        miniConsole.AddLineInfo("Client %s want to reauth, but not implemented", this->getClientIpPort().c_str());
+                    } else {
+                        miniConsole.AddLine("Client %s sent data, remaining need to be sent: %d", this->getClientIpPort().c_str(), lastDataRemainingSize);
+                        if(lastDataRemainingSize == 0) {
+                            miniConsole.AddLine("Client %s complete sent data", this->getClientIpPort().c_str());
+                            std::vector<uint8_t> plainText;
+                            Message msg;
+                            crypt.decrypt(fullData, nonce, plainText);
+                            ret = assembleMessage((char*) plainText.data(), plainText.size(), msg);
+                            if(!ret) {
+                                miniConsole.AddLineError("Client %s can't setup message", this->getClientIpPort().c_str());
+                            }
+                        }
+                    }
+                }
             } else if(ret == 0) {
-                fprintf(stderr, "Client %s disconnected gracefully\n", this->getClientIpPort().c_str());
+                miniConsole.AddLineInfo("Client %s disconnected gracefully", this->getClientIpPort().c_str());
                 break;
             } else if(ret < 0) {
                 /*
                 if (WSAGetLastError() != WSAEWOULDBLOCK) {
-                    fprintf(stderr, "is server force disconnecting?\n");
+                    miniConsole.AddLineWarning("is server force disconnecting?\n");
                 }
                 */
-                fprintf(stderr, "Client %s disconnected abruptedly. error\n", this->getClientIpPort().c_str());
+                miniConsole.AddLineWarning("Client %s disconnected abruptedly\n", this->getClientIpPort().c_str());
                 break;
             }
         }
@@ -185,14 +219,13 @@ private:
             if(incomingSocket == -1) continue;  //skip?
             if(isInvalidAddress(&incomingAddress)) closesocket(incomingSocket);
             ClientSession *clientInstance = new ClientSession(incomingSocket, incomingAddress);
-            printf("client %s connected!\n", clientInstance->getClientIpPort().c_str());
+            miniConsole.AddLineSuccess("client %s connected!\n", clientInstance->getClientIpPort().c_str());
             clientVector.pushBack(clientInstance);
         }
     }
 
 public:
     void init() {
-        puts("Server init");
         int newSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (newSocket == -1) {
             running.store(false);
@@ -221,6 +254,7 @@ public:
 
         socketfile.store(newSocket);
         running.store(true);
+        miniConsole.AddLineSuccess("Server initialized!");
 
         ThreadWrapper looper(ServerConnectionManager::acceptClientLoop, this);
     }
@@ -245,11 +279,34 @@ public:
         running.store(false);
     }
 
-    void sendData(ClientSession *c, const std::string& tstr) {
-        int sent = send(c->getClientSocket(), tstr.c_str(), (int)tstr.size(), 0);
-        if(sent != (int) tstr.size()) {
-            fprintf(stderr, "Failed to send complete message to %s\n", c->getClientIpPort().c_str());
+    bool sendData(ClientSession *c, const Message& msg) {
+        char *data;
+        int dataSize;
+        int ret = prepareMessage(msg, data, dataSize, NULL);
+        if(!ret) {
+            miniConsole.AddLineError("Failed to prepare message for %s\n", c->getClientIpPort().c_str());
+            return 0;
         }
+        std::vector<uint8_t> dataVec(dataSize, 0);
+        std::vector<uint8_t> cipherText;
+        std::array<uint8_t, 12> nonce;
+
+        uint8_t *dataVecPtr = dataVec.data();
+        memcpy(dataVecPtr, data, dataSize);
+        delete[] data;
+        crypt.encrypt(dataVec, cipherText, nonce);
+        int cipherTextSizeRemaining = cipherText.size();
+
+        int sent = 0;
+        while(cipherTextSizeRemaining > 0) {
+            sent = send(c->getClientSocket(), (char*) cipherText.data()+sent, cipherTextSizeRemaining, 0);
+            if(sent == -1) {
+                miniConsole.AddLineError("Failed to send complete message to %s\n", c->getClientIpPort().c_str());
+                return 0;
+            }
+            cipherTextSizeRemaining -= sent;
+        }
+        return 1;
     }
 };
 
@@ -271,14 +328,20 @@ void RunGui() {
         if(ImGui::CollapsingHeader(ref->getClientIpPort().c_str())) {
             ImGui::Text("Connected for: %s", ref->getConnectionDuration().c_str());
             std::string displayData(ref->outputBuffer, strnlen(ref->outputBuffer, BufferSize));
-            ImGui::InputTextMultiline(ref->makeWidgetName("Received Data").c_str(), 
-                const_cast<char*>(displayData.c_str()), displayData.size() + 1, 
-                ImVec2(-1, 100), ImGuiInputTextFlags_ReadOnly);
             ImGui::InputText(ref->makeWidgetName("Send to client").c_str(), &clientVector[i]->inputBuffer);
             if(ImGui::Button(ref->makeWidgetName("Send").c_str()) && !clientVector[i]->inputBuffer.empty()) {
                 ThreadWrapper sendThread([](ClientSession *c) {
-                    connectionManager.sendData(c, c->inputBuffer);
-                    c->inputBuffer.clear();
+                    if(crypt.checkOtherPublicKeyStatus()) {
+                        Message textMessage;
+                        textMessage.commandNumber = MessageRawText;
+                        textMessage.setBinaryData(c->inputBuffer.c_str(), c->inputBuffer.size());
+                        if(connectionManager.sendData(c, textMessage)) {
+                            c->inputBuffer.clear();
+                            miniConsole.AddLineSuccess("Client %s: Meesage sent", c->getClientIpPort());
+                        }
+                    } else {
+                        miniConsole.AddLineError("Client %s: Can't send meesage. Hasn't received client public key", c->getClientIpPort());
+                    }
                 }, ref);
             }
             if(ImGui::Button(ref->makeWidgetName("Kick").c_str())) {
@@ -287,6 +350,8 @@ void RunGui() {
             }
         }
     }
+    ImGui::SeparatorText("Console");
+    miniConsole.Draw();
     ImGui::SeparatorText("System");
     ImGui::Text("Average FPS: %d", (int) roundf(io.Framerate));
     ImGui::End();
@@ -327,15 +392,11 @@ void RunSFMLBackend() {
     ImGui::SFML::Shutdown();
 }
 
-void checkVector() {
-
-}
-
 int main(void) {
     WSADATA wsaData;
     // Initialize Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        printf("WSAStartup failed\n");
+        std::cerr << "WSAStartup failed\n";
         return 1;
     }
 

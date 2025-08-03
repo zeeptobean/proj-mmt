@@ -48,4 +48,11 @@ template <class T> void ComSafeRelease(T **ppT)
     }
 }
 
+void PrintHexByteArray(const std::string& prefix, uint8_t *arr, int size, bool spacing = false) {
+    printf("%s ", prefix.c_str());
+    if(spacing) for(int i=0; i < size; i++) printf("%02x ", arr[i]);
+    else for(int i=0; i < size; i++) printf("%02x", arr[i]);
+    printf("\n");
+}
+
 #endif

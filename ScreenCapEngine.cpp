@@ -1,27 +1,10 @@
-
-#include <cstdio>
-#include <ctime>
-#include <cassert>
-#include <fstream>
-#include <iostream>
-#include <map>
-#include <vector>
-#include <functional>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <queue>
-#include <algorithm>
-#include <list>
-
-#include <windows.h>
+#include "Engine.hpp"
 #include <ShlObj.h>
 #include <Gdiplus.h>
 
-class leblanc {
+class ScreenCapEngine::leblanc {
     private:
-    static std::vector<long long> linehash;
-    long long hashval, hashmod;
+    long long hashmod;
     int hashbase;
     int freelim = 0;
 
@@ -30,6 +13,8 @@ class leblanc {
     char *memblock;
     STATSTG *jpg_stat;
     IStream *rawbitmap_stream, *jpg_stream;
+
+    ScreenCapEngine *enginePtr;
 
 	/*Return -1 if fail, non-negative if success*/
     int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
@@ -57,7 +42,7 @@ class leblanc {
         return -1;  // Failure
     }
 
-    long long hash(char *block, int size, long long mod = (long long) 1e9 + 7, int base = 261) {
+    long long hash(char *block, int size, long long mod = (long long) 1e9 + 7, int base = 241) {
         long long ans = 0;
         long long cbase = base;
         for(int i=0; i < size; i++) {
@@ -69,9 +54,9 @@ class leblanc {
     }
 
     public:
-    leblanc() : hashmod((long long) 1e9 + 7), hashbase(261) {};
+    leblanc(ScreenCapEngine *tenginePtr) : leblanc(tenginePtr, (long long) 1e9 + 7, 241) {};
 
-    leblanc(long long thashmod, int thashbase) : hashmod(thashmod), hashbase(thashbase) {}
+    leblanc(ScreenCapEngine *tenginePtr, long long thashmod, int thashbase) : enginePtr(tenginePtr), hashmod(thashmod), hashbase(thashbase) {}
 
     ~leblanc() {
         if(freelim >= 1) ReleaseDC(NULL, hDC);
@@ -89,7 +74,7 @@ class leblanc {
     /// @param hs [in] the factor for the hash check function. Value must be 0 to skip the check 
     /// @return 0 is success, 0xFF(255) if the image is considered duplicated 
     /// with previous shot; otherwise fail; Buffer must be cleaned up using C function free()
-    int WINAPI MakeBitmap(char **allocatedJPG, unsigned int* allocatedsize, unsigned int hs) {
+    int WINAPI MakeBitmap(char **allocatedJPG, unsigned int* allocatedsize, unsigned int hs = 3) {
         freelim = 0;
 
         BITMAPFILEHEADER bfHeader;
@@ -178,10 +163,10 @@ class leblanc {
                 }
                 tlinehash[i*hs+(hs-1)] = hash(memblock+(width*i+proc*(hs-1)), proc2, hashmod, hashbase);
             }
-            if(tlinehash.size() == linehash.size()) {
+            if(tlinehash.size() == enginePtr->linehash.size()) {
                 int matchcnt = 0;
                 for(int i=0; i < tlinehash.size(); i++) {
-                    if(tlinehash[i] == linehash[i]) matchcnt++;
+                    if(tlinehash[i] == enginePtr->linehash[i]) matchcnt++;
                 }
                 float flt = (float) matchcnt / tlinehash.size();
                 if(flt > 0.95f) {
@@ -189,7 +174,7 @@ class leblanc {
                 }
             }
 
-            linehash = tlinehash;
+            enginePtr->linehash = tlinehash;
         }
 
         //compress
@@ -243,25 +228,29 @@ class leblanc {
         //seek back to beginning to read
         if(jpg_stream->Seek(__TEMP_SEEK_OFFSET, STREAM_SEEK_SET, NULL) != S_OK) {
             free(allocatedJPG);
-            return -3;
+            return -4;
         }
         if(jpg_stream->Read(*allocatedJPG, *allocatedsize, &dwWritten) != S_OK) {
-            free(allocatedJPG);
-            return -4;
+            free(*allocatedJPG);
+            *allocatedJPG = nullptr;
+            return -5;
         }
 
         return returncode;
     }
 };
 
-std::vector<long long> leblanc::linehash{};
-
-int main() {
-    ULONG_PTR GDIPLUS_TOKEN;
-    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-	Gdiplus::GdiplusStartup(&GDIPLUS_TOKEN, &gdiplusStartupInput, NULL);
-
-    Gdiplus::GdiplusShutdown(GDIPLUS_TOKEN);
+int ScreenCapEngine::MakeBitmap(char **allocatedJPG, unsigned int* allocatedsize) {
+    leblanc l(this);
+    return l.MakeBitmap(allocatedJPG, allocatedsize);
 }
+
+// int main() {
+//     ULONG_PTR GDIPLUS_TOKEN;
+//     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+// 	Gdiplus::GdiplusStartup(&GDIPLUS_TOKEN, &gdiplusStartupInput, NULL);
+
+//     Gdiplus::GdiplusShutdown(GDIPLUS_TOKEN);
+// }
 
 
