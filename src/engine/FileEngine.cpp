@@ -142,7 +142,7 @@ int ListFilehandler(const Message& inputMessage, Message& outputMessage) {
         if(findFileData.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) {
             iteFileAttributeList.push_back("hidden");
         }
-        if(findFileData.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM | findFileData.dwFileAttributes & FILE_ATTRIBUTE_DEVICE) {
+        if(findFileData.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM || findFileData.dwFileAttributes & FILE_ATTRIBUTE_DEVICE) {
             iteFileAttributeList.push_back("system");
         }
         if(findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {

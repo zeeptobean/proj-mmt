@@ -1,9 +1,9 @@
+#pragma once
 
 #include <thread>
 #include <future>
 #include <functional>
 #include <atomic>
-
 
 /**
  * I don't like std::thread implicitly running the thread upon creation that it would
@@ -22,35 +22,12 @@ class ThreadWrapper {
 
     ThreadWrapper() noexcept = default;
 
-    ThreadWrapper(ThreadWrapper&& rhs) noexcept 
-        : thread_(std::move(rhs.thread_)),
-          startPromise_(std::move(rhs.startPromise_)),
-          didRun(rhs.didRun.load()) 
-    {
-        rhs.didRun.store(false);
-    }
+    ThreadWrapper(ThreadWrapper&& rhs) noexcept;
 
     // Move assignment operator
-    ThreadWrapper& operator=(ThreadWrapper&& rhs) noexcept {
-        if (this != &rhs) {
-            if (thread_.joinable()) {
-                thread_.detach();
-            }
-            
-            thread_ = std::move(rhs.thread_);
-            startPromise_ = std::move(rhs.startPromise_);
-            didRun.store(rhs.didRun.load());
-            rhs.didRun.store(false);
-        }
-        return *this;
-    }
+    ThreadWrapper& operator=(ThreadWrapper&& rhs) noexcept;
 
-    bool run() noexcept {
-        if(didRun.load()) return false;
-        startPromise_.set_value();
-        didRun.store(true);
-        return true;
-    }
+    bool run() noexcept;
 
     template <typename F, typename... Args>
     explicit ThreadWrapper(F&& f, Args&&... args) {
@@ -60,75 +37,5 @@ class ThreadWrapper {
         }, startPromise_.get_future());
     }
 
-    ~ThreadWrapper() {
-        if(thread_.joinable()) {
-            thread_.detach();
-        }
-    }
+    ~ThreadWrapper();
 };
-
-/*
-class ThreadWrapper {
-    static_assert(__cplusplus >= 201703L);
-private:
-    std::thread thread_;
-    std::promise<void> startPromise_;
-    std::atomic<bool> shouldStop_{false};
-    std::atomic<bool> running_{false};
-
-public:
-    // Deleted copy operations
-    ThreadWrapper(const ThreadWrapper&) = delete;
-    ThreadWrapper& operator=(const ThreadWrapper&) = delete;
-
-    // Main constructor (unchanged from original)
-    template <typename F, typename... Args>
-    explicit ThreadWrapper(F&& f, Args&&... args) {
-        thread_ = std::thread([this, f_ = std::forward<F>(f), 
-                             args_ = std::make_tuple(std::forward<Args>(args)...)]
-                            (std::future<void> startSignal) mutable {
-            startSignal.wait();
-            running_ = true;
-            std::apply(f_, args_);  // Execute the function
-            running_ = false;
-        }, startPromise_.get_future());
-    }
-
-    // Move operations
-    ThreadWrapper(ThreadWrapper&& rhs) noexcept :
-        thread_(std::move(rhs.thread_)),
-        shouldStop_(rhs.shouldStop_.load()),
-        running_(rhs.running_.load())
-    {}
-
-    // Control methods
-    bool run() noexcept {
-        if(running_) return false;
-        startPromise_.set_value();
-        return true;
-    }
-
-    void requestStop() noexcept {
-        shouldStop_ = true;
-    }
-
-    bool shouldStop() const noexcept {
-        return shouldStop_;
-    }
-
-    bool isRunning() const noexcept {
-        return running_;
-    }
-
-    ~ThreadWrapper() {
-        requestStop();
-        if(thread_.joinable()) {
-            if(running_) {
-                thread_.join();
-            } else {
-                thread_.detach();
-            }
-        }
-    }
-};
-*/

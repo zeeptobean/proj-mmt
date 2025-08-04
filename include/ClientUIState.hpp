@@ -14,7 +14,7 @@ class ClientUIState {
     public:
     std::atomic<bool> isKeylogger{false};
 
-    static ClientUIState& ClientUIState::getInstance() {
+    static ClientUIState& getInstance() {
         static ClientUIState instance;
         return instance;
     }

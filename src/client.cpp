@@ -21,11 +21,11 @@
 #include <bits/stdc++.h>
 #include "ThreadWrapper.hpp"
 #include "ImGuiStdString.hpp"
-#include "GuiScrollableText.hpp"
+#include "ImGuiScrollableText.hpp"
 #include "Message.hpp"
 #include "CryptHandler.hpp"
-#include "GuiScrollableText.hpp"
 #include "ClientUIState.hpp"
+#include "InternalUtilities.hpp"
 using namespace std;
 
 #define DEFAULT_BUFLEN 2048
@@ -42,7 +42,21 @@ std::string inputBuffer;
 
 CryptHandler crypt;
 
-ScrollableTextDisplay miniConsole;
+GuiScrollableTextDisplay miniConsole;
+
+int MessageExecute(const Message& inputMessage, Message& outputMessage) {
+    int command = inputMessage.commandNumber;
+    switch(command) {
+        case MessageRawText: {
+            std::string rawMessage(inputMessage.getBinaryData(), inputMessage.getBinaryDataSize());
+            ClientUIState::getInstance().setRawMessage(rawMessage);
+            return 1;
+            //do not send back;
+        }
+        default: break;
+    }
+    return 0;
+}
 
 class ClientConnectionManager {
 private:
@@ -276,6 +290,10 @@ void RunSFMLBackend() {
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLine, int nCmdShow) {
+    UNREFERENCED_PARAMETER(hInstance);
+    UNREFERENCED_PARAMETER(hPrevInstance);
+    UNREFERENCED_PARAMETER(lpCmdLine);
+    UNREFERENCED_PARAMETER(nCmdShow);
     //Attach console for debugging
     /*
     if (AttachConsole(ATTACH_PARENT_PROCESS) || AllocConsole()) {

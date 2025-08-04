@@ -24,7 +24,7 @@
 #include "ImGuiStdString.hpp"
 #include "ThreadWrapper.hpp"
 #include "Message.hpp"
-#include "GuiScrollableText.hpp"
+#include "ImGuiScrollableText.hpp"
 #include "CryptHandler.hpp"
 
 using namespace std;
@@ -35,7 +35,7 @@ const int BufferSize = 2048;
 
 std::map<std::string, uint32_t> clientNamingPool;
 
-ScrollableTextDisplay miniConsole;
+GuiScrollableTextDisplay miniConsole;
 
 CryptHandler crypt;
 

@@ -8,7 +8,7 @@
 #define UNREFERENCED_PARAMETER(p) {(p) = (p);}
 #endif
 
-bool WideStringToString(const std::wstring& wstr, std::string& str) {
+inline bool WideStringToString(const std::wstring& wstr, std::string& str) {
     unsigned int len;
     int res = 0, lasterror = 0;
     UNREFERENCED_PARAMETER(lasterror);
@@ -24,7 +24,7 @@ bool WideStringToString(const std::wstring& wstr, std::string& str) {
     return (bool) res;
 }
 
-bool StringToWideString(const std::string& str, std::wstring& wstr) {
+inline bool StringToWideString(const std::string& str, std::wstring& wstr) {
     unsigned int len;
     int res = 0, lasterror = 0;
     UNREFERENCED_PARAMETER(lasterror);
@@ -48,7 +48,7 @@ template <class T> void ComSafeRelease(T **ppT)
     }
 }
 
-void PrintHexByteArray(const std::string& prefix, uint8_t *arr, int size, bool spacing = false) {
+inline void PrintHexByteArray(const std::string& prefix, uint8_t *arr, int size, bool spacing = false) {
     printf("%s ", prefix.c_str());
     if(spacing) for(int i=0; i < size; i++) printf("%02x ", arr[i]);
     else for(int i=0; i < size; i++) printf("%02x", arr[i]);

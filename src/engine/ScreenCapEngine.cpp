@@ -4,6 +4,8 @@
 
 class ScreenCapEngine::leblanc {
     private:
+    ScreenCapEngine *enginePtr;
+
     long long hashmod;
     int hashbase;
     int freelim = 0;
@@ -13,8 +15,6 @@ class ScreenCapEngine::leblanc {
     char *memblock;
     STATSTG *jpg_stat;
     IStream *rawbitmap_stream, *jpg_stream;
-
-    ScreenCapEngine *enginePtr;
 
 	/*Return -1 if fail, non-negative if success*/
     int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
@@ -158,14 +158,14 @@ class ScreenCapEngine::leblanc {
             int proc = width/hs;
             int proc2 = proc + (width % hs);
             for(int i=0; i < height; i++) {
-                for(int j=0; j < hs-1; j++) {
+                for(unsigned int j=0; j < hs-1; j++) {
                     tlinehash[i*hs+j] = hash(memblock+(width*i+proc*j), proc, hashmod, hashbase);
                 }
                 tlinehash[i*hs+(hs-1)] = hash(memblock+(width*i+proc*(hs-1)), proc2, hashmod, hashbase);
             }
             if(tlinehash.size() == enginePtr->linehash.size()) {
                 int matchcnt = 0;
-                for(int i=0; i < tlinehash.size(); i++) {
+                for(int i=0; i < (int) tlinehash.size(); i++) {
                     if(tlinehash[i] == enginePtr->linehash[i]) matchcnt++;
                 }
                 float flt = (float) matchcnt / tlinehash.size();
