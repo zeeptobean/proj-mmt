@@ -25,7 +25,7 @@
 #include "ThreadWrapper.hpp"
 #include "Message.hpp"
 #include "GuiScrollableText.hpp"
-#include "CryptEngine.hpp"
+#include "CryptHandler.hpp"
 
 using namespace std;
 
@@ -37,7 +37,7 @@ std::map<std::string, uint32_t> clientNamingPool;
 
 ScrollableTextDisplay miniConsole;
 
-CryptEngine crypt;
+CryptHandler crypt;
 
 class ClientSession {
     int socket;

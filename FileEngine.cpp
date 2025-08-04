@@ -90,11 +90,13 @@ int DeleteFileHandler(const Message& inputMessage, Message& outputMessage) {
         outputMessage.returnCode = 1;
         outputJson["errorString"] = "OK";
         outputMessage.setJsonData(outputJson);
+        return 1;
     } else {
         outputMessage.commandNumber = MessageDeleteFile;
         outputMessage.returnCode = 0;
         outputJson["errorString"] = "Delete file failed";
         outputMessage.setJsonData(outputJson);
+        return 0;
     }
 }
 

@@ -1,5 +1,7 @@
 #include <bits/stdc++.h>
 #include "nlohmann/json.hpp"
+#include "Engine.hpp"
+#include "ClientUIState.hpp"
 using json = nlohmann::json;
 
 enum MessageEnum {
@@ -264,3 +266,17 @@ int proceedEncryptedMessage(const char *bindata, int size, std::vector<uint8_t>&
    * 2. Encrypt that whole big chunk to EncryptedMessage
    * 2.5. Encrypted message is the TCP "front-end": do the job of splitting the encrypted message
    */
+
+int MessageExecute(const Message& inputMessage, Message& outputMessage) {
+    int command = inputMessage.commandNumber;
+    switch(command) {
+        case MessageRawText: {
+            std::string rawMessage(inputMessage.getBinaryData(), inputMessage.getBinaryDataSize());
+            ClientUIState::getInstance().setRawMessage(rawMessage);
+            return 1;
+            //do not send back;
+        }
+        default: break;
+    }
+    return 0;
+}

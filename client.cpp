@@ -23,6 +23,9 @@
 #include "ImGuiStdString.hpp"
 #include "GuiScrollableText.hpp"
 #include "Message.hpp"
+#include "CryptHandler.hpp"
+#include "GuiScrollableText.hpp"
+#include "ClientUIState.hpp"
 using namespace std;
 
 #define DEFAULT_BUFLEN 2048
@@ -37,6 +40,10 @@ std::mutex socketMutex;
 
 std::string inputBuffer;
 
+CryptHandler crypt;
+
+ScrollableTextDisplay miniConsole;
+
 class ClientConnectionManager {
 private:
     std::atomic<int> socketfile{-1};
@@ -45,33 +52,46 @@ private:
     std::queue<std::string> receivedMessages;
     
     void listenToServer() {
+        std::vector<uint8_t> fullData;
+        int lastDataRemainingSize = 0;
+        std::array<uint8_t, 12> nonce;
+
         while (connected.load()) {
             memset(buf, 0, sizeof(buf));
             int bytesReceived = recv(socketfile.load(), buf, BufferSize, 0);
             buf[bytesReceived] = '\0';
             if (bytesReceived > 0) {
-                int status = proceedEncryptedMessage(this->outputBuffer, ret, fullData, lastDataRemainingSize, nonce, NULL);
+                int status = proceedEncryptedMessage(buf, bytesReceived, fullData, lastDataRemainingSize, nonce, NULL);
                 if(!crypt.checkOtherPublicKeyStatus()) {
                     if(status == 2) {
                         std::array<uint8_t, 32> outkey;
                         for(int i=0; i < 32; i++) outkey[i] = fullData[i];
                         crypt.setOtherPublicKey(outkey);
                     } else {
-                        miniConsole.AddLineWarning("Client %s haven't send their key, can't proceed data", this->getClientIpPort().c_str());
+                        miniConsole.AddLineWarning("Server haven't send their key, can't proceed data");
                     }
                 } else {
                     if(status == 2) {
-                        miniConsole.AddLineInfo("Client %s want to reauth, but not implemented", this->getClientIpPort().c_str());
+                        miniConsole.AddLineInfo("Server want to reauth, but not implemented");
                     } else {
-                        miniConsole.AddLine("Client %s sent data, remaining need to be sent: %d", this->getClientIpPort().c_str(), lastDataRemainingSize);
+                        miniConsole.AddLine("Server sent data, remaining need to be sent: %d", lastDataRemainingSize);
                         if(lastDataRemainingSize == 0) {
-                            miniConsole.AddLine("Client %s complete sent data", this->getClientIpPort().c_str());
+                            miniConsole.AddLine("Server complete sent data");
                             std::vector<uint8_t> plainText;
                             Message msg;
                             crypt.decrypt(fullData, nonce, plainText);
-                            ret = assembleMessage((char*) plainText.data(), plainText.size(), msg);
-                            if(!ret) {
-                                miniConsole.AddLineError("Client %s can't setup message", this->getClientIpPort().c_str());
+                            bytesReceived = assembleMessage((char*) plainText.data(), plainText.size(), msg);
+                            if(bytesReceived) {
+                                ThreadWrapper([&msg]{
+                                    Message outmsg;
+                                    if(MessageExecute(msg, outmsg)) {
+                                        miniConsole.AddLineSuccess("Successfully executed message!");
+                                    } else {
+                                        miniConsole.AddLineWarning("Couldn't execute message!");
+                                    }
+                                });
+                            } else {
+                                miniConsole.AddLineError("Server can't setup message");
                             }
                         }
                     }
@@ -198,10 +218,12 @@ void RunGui() {
     if (connectionManager.isConnected()) {
         ImGui::SeparatorText("Raw messages received");
         if (ImGui::BeginChild("Messages", ImVec2(-1, 150), true)) {
-            ImGui::TextWrapped("%s", buf);
+            ImGui::TextWrapped("%s", ClientUIState::getInstance().getRawMessage().c_str());
         }
         ImGui::EndChild();
     }
+    ImGui::SeparatorText("Console");
+    miniConsole.Draw();
 
     ImGui::End();
 }

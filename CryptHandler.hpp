@@ -8,7 +8,7 @@
 const char CIPHER_AAD[] = "project-malware-mmt-24c06-zeept";     //perfectly 32 bytes!
 
 //Todo: add support to key renewal
-class CryptEngine {
+class CryptHandler {
     private:
 
     std::array<uint8_t, crypto_box_PUBLICKEYBYTES> publicKey;
@@ -27,12 +27,12 @@ class CryptEngine {
     }
 
     public:
-    CryptEngine(const std::array<uint8_t, 32>& clientPublicKey) {
+    CryptHandler(const std::array<uint8_t, 32>& clientPublicKey) {
         setOtherPublicKey(clientPublicKey);
         generateKey();
     }
 
-    CryptEngine(const CryptEngine&) = delete;
+    CryptHandler(const CryptHandler&) = delete;
 
     void generateKey() {
         crypto_box_keypair(publicKey.data(), secretKey.data());
@@ -95,7 +95,7 @@ class CryptEngine {
         return true;
     }
 
-    ~CryptEngine() {
+    ~CryptHandler() {
         sodium_memzero(publicKey.data(), 32);
         sodium_memzero(secretKey.data(), 32);
         sodium_memzero(sharedKey.data(), 32);
