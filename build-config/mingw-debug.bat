@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 
 set BaseDir=..
 
@@ -37,13 +37,18 @@ for %%f in (%BaseDir%\src\component\*.cpp) do (
 echo Compiling client
 %Compiler% %CompilerFlag% %IncludeFlag% %ImGuiFlag% -c "%BaseDir%\src\client.cpp" -o "%BaseDir%\bin\client.o"
 
-echo Linking client
-%Compiler% -mwindows -municode %CompilerFlag% "%BaseDir%\bin\engine\*.o" "%BaseDir%\bin\component\*.o" "%BaseDir%\bin\client.o" -o "%BaseDir%\bin\client.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
-
 echo Compiling server
 %Compiler% %CompilerFlag% %IncludeFlag% %ImGuiFlag% -c "%BaseDir%\src\server.cpp" -o "%BaseDir%\bin\server.o"
 
+set ObjectFiles=
+for %%f in ("%BaseDir%\bin\engine\*.o" "%BaseDir%\bin\component\*.o") do (
+    set ObjectFiles=!ObjectFiles! "%%f"
+)
+
+echo Linking client
+%Compiler% -mwindows -municode %CompilerFlag% %ObjectFiles% "%BaseDir%\bin\client.o"  -o "%BaseDir%\bin\client.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
+
 echo Linking server
-%Compiler% %CompilerFlag% "%BaseDir%\bin\engine\*.o" "%BaseDir%\bin\component\*.o" "%BaseDir%\bin\server.o" -o "%BaseDir%\bin\server.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
+%Compiler% %CompilerFlag% %ObjectFiles% "%BaseDir%\bin\server.o" -o "%BaseDir%\bin\server.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
 
 endlocal
