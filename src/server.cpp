@@ -1,316 +1,250 @@
-//Blocking - do lockup
-
-#define WIN32_LEAN_AND_MEAN
-#ifdef WIN32
-#include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#endif
-
-#include <SFML/Graphics.hpp>
-#include <SFML/Network.hpp>
-#include <imgui.h>
-#include <imgui-SFML.h>
-
-#include <imconfig.h>
-
-#include <bits/stdc++.h>
-#include "ImGuiStdString.hpp"
-#include "ThreadWrapper.hpp"
-#include "Message.hpp"
-#include "ImGuiScrollableText.hpp"
-#include "CryptHandler.hpp"
-
-using namespace std;
-
-#define DEFAULT_BUFLEN 2048
-#define DEFAULT_PORT 62300
-const int BufferSize = 2048;
+#include "server.hpp"
 
 std::map<std::string, uint32_t> clientNamingPool;
+
+ServerConnectionManager connectionManager;
+
+ClientVector clientVector;
 
 GuiScrollableTextDisplay miniConsole;
 
 CryptHandler crypt;
 
-class ClientSession {
-    int socket;
-    sockaddr_in clientAddress;
-    std::string clientIp;
-    uint16_t clientPort;
-    std::chrono::system_clock::time_point connectionTime;
+void ServerConnectionManager::acceptClientLoop() {
+    sockaddr_in incomingAddress;
+    const int incomingAddressSize = sizeof(incomingAddress);
+    while(running.load()) {
+        int incomingSocket = (int) accept(socketfile, (sockaddr*) &incomingAddress, const_cast<int*>(&incomingAddressSize));
+        if(incomingSocket == -1) continue;  //skip?
+        if(isInvalidAddress(&incomingAddress)) closesocket(incomingSocket);
+        ClientSession *clientInstance = new ClientSession(incomingSocket, incomingAddress);
+        miniConsole.AddLineSuccess("client %s connected!\n", clientInstance->getClientIpPort().c_str());
+        clientVector.pushBack(clientInstance);
+    }
+}
 
-    void init() {
-        active = 1;
-        char *tmp = inet_ntoa(clientAddress.sin_addr);
-        clientIp = std::string(tmp);
-        clientPort = ntohs(clientAddress.sin_port);
-        connectionTime = std::chrono::system_clock::now();
-        ThreadWrapper th (ClientSession::clientListener, this);
+void ServerConnectionManager::init() {
+    int newSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (newSocket == -1) {
+        running.store(false);
+        // throw std::runtime_error("socket failed");
+    }
+    int reuse = 1;
+    setsockopt(newSocket, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
+
+    sockaddr_in sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(DEFAULT_PORT);
+    sa.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    if (bind(newSocket, (sockaddr*)&sa, sizeof(sa)) == -1) {
+        closesocket(newSocket);
+        running.store(false);
+        // throw std::runtime_error("bind failed");
     }
 
-    void clientListener() {
-        std::vector<uint8_t> fullData;
-        int lastDataRemainingSize = 0;
-        std::array<uint8_t, 12> nonce;
+    if (listen(newSocket, SOMAXCONN) == SOCKET_ERROR) {
+        closesocket(newSocket);
+        running.store(false);
+        // throw std::runtime_error("listen failed");
+    }
 
-        while(this->active.load()) {
-            int ret = recv(this->getClientSocket(), this->outputBuffer, BufferSize, 0);
-            this->outputBuffer[ret] = 0;
-            if(ret > 0) {
-                int status = proceedEncryptedMessage(this->outputBuffer, ret, fullData, lastDataRemainingSize, nonce, NULL);
-                if(!crypt.checkOtherPublicKeyStatus()) {
-                    if(status == 2) {
-                        std::array<uint8_t, 32> outkey;
-                        for(int i=0; i < 32; i++) outkey[i] = fullData[i];
-                        crypt.setOtherPublicKey(outkey);
-                    } else {
-                        miniConsole.AddLineWarning("Client %s haven't send their key, can't proceed data", this->getClientIpPort().c_str());
-                    }
+    socketfile.store(newSocket);
+    running.store(true);
+    miniConsole.AddLineSuccess("Server initialized!");
+
+    ThreadWrapper looper(ServerConnectionManager::acceptClientLoop, this);
+}
+
+void ServerConnectionManager::disconnect() {
+    if (!running.load()) return;
+    int currentSocket = socketfile.load();
+    if(currentSocket != -1) {
+        shutdown(currentSocket, SD_BOTH);
+        closesocket(currentSocket);
+    }
+    
+    socketfile.store(-1);
+    running.store(false);
+}
+
+//could be called within a thread
+bool ServerConnectionManager::sendData(ClientSession *c, const Message& msg) {
+    char *data;
+    int dataSize;
+    int ret = prepareMessage(msg, data, dataSize, NULL);
+    if(!ret) {
+        miniConsole.AddLineError("Failed to prepare message for %s\n", c->getClientIpPort().c_str());
+        return 0;
+    }
+    std::vector<uint8_t> dataVec(dataSize, 0);
+    std::vector<uint8_t> cipherText;
+    std::array<uint8_t, 12> nonce;
+    
+    uint8_t *dataVecPtr = dataVec.data();
+    memcpy(dataVecPtr, data, dataSize);
+    delete[] data;
+    crypt.encrypt(dataVec, cipherText, nonce);
+    
+    uint8_t *noncePtr = nonce.data();
+    uint8_t *cipherTextPtr = cipherText.data();
+
+    std::vector<uint8_t> fullEncryptedSegment (cipherText.size() + 24, 0);
+    int fullEncryptedSegmentSize = (int) fullEncryptedSegment.size();
+    uint8_t *fullEncryptedSegmentPtr = fullEncryptedSegment.data();
+    memcpy(fullEncryptedSegmentPtr, "ZZTE", 4);
+    memcpy(fullEncryptedSegmentPtr+4, &fullEncryptedSegmentSize, 4);
+    memcpy(fullEncryptedSegmentPtr+8, noncePtr, 12);
+    memcpy(fullEncryptedSegmentPtr+24, cipherTextPtr, cipherText.size());
+    int remaining = fullEncryptedSegment.size();
+
+    int sent = 0;
+    while(remaining > 0) {
+        sent = send(c->getClientSocket(), (char*) cipherText.data()+sent, remaining, 0);
+        if(sent == -1) {
+            miniConsole.AddLineError("Failed to send complete message to %s\n", c->getClientIpPort().c_str());
+            return 0;
+        }
+        remaining -= sent;
+    }
+    return 1;
+}
+
+//Each entity handle key sending on their own
+//could be called within a thread
+bool ServerConnectionManager::sendPublicKey(ClientSession *c) {
+    char tbuf[40];
+    tbuf[0] = 'Z';
+    tbuf[1] = 'Z';
+    tbuf[2] = 'T';
+    tbuf[3] = 'E';
+    tbuf[4] = (char) 0xff;
+    tbuf[5] = (char) 0xff;
+    tbuf[6] = (char) 0xff;
+    tbuf[7] = (char) 0xff;
+    std::array<uint8_t, 32> tpubkey = crypt.getPublicKey();
+    memcpy(tbuf+8, tpubkey.data(), 32);
+
+    int sent = send(c->getClientSocket(), tbuf, 40, 0);
+    if(sent != 40) {
+        miniConsole.AddLineError("Failed to send server public key to %s\n", c->getClientIpPort().c_str());
+        return 0;
+    }
+    return 1;
+}
+
+///////////////////////////////////
+
+void ClientSession::init() {
+    active = 1;
+    char *tmp = inet_ntoa(clientAddress.sin_addr);
+    clientIp = std::string(tmp);
+    clientPort = ntohs(clientAddress.sin_port);
+    connectionTime = std::chrono::system_clock::now();
+    ThreadWrapper th (ClientSession::clientListener, this);
+}
+
+void ClientSession::clientListener() {
+    std::vector<uint8_t> fullData;
+    int lastDataRemainingSize = 0;
+    std::array<uint8_t, 12> nonce;
+
+    if(connectionManager.sendPublicKey(this)) {
+        miniConsole.AddLineSuccess("Successfully sent key to client %s", this->getClientIpPort().c_str());
+    } else {
+        miniConsole.AddLineError("Failed sent key to client %s", this->getClientIpPort().c_str());
+    }
+
+    while(this->active.load()) {
+        int ret = recv(this->getClientSocket(), this->outputBuffer, BufferSize, 0);
+        this->outputBuffer[ret] = 0;
+        if(ret > 0) {
+            int status = proceedEncryptedMessage(this->outputBuffer, ret, fullData, lastDataRemainingSize, nonce, NULL);
+            if(!crypt.checkOtherPublicKeyStatus()) {
+                if(status == 2) {
+                    std::array<uint8_t, 32> outkey;
+                    for(int i=0; i < 32; i++) outkey[i] = fullData[i];
+                    crypt.setOtherPublicKey(outkey);
                 } else {
-                    if(status == 2) {
-                        miniConsole.AddLineInfo("Client %s want to reauth, but not implemented", this->getClientIpPort().c_str());
-                    } else {
-                        miniConsole.AddLine("Client %s sent data, remaining need to be sent: %d", this->getClientIpPort().c_str(), lastDataRemainingSize);
-                        if(lastDataRemainingSize == 0) {
-                            miniConsole.AddLine("Client %s complete sent data", this->getClientIpPort().c_str());
-                            std::vector<uint8_t> plainText;
-                            Message msg;
-                            crypt.decrypt(fullData, nonce, plainText);
-                            ret = assembleMessage((char*) plainText.data(), plainText.size(), msg);
-                            if(!ret) {
-                                miniConsole.AddLineError("Client %s can't setup message", this->getClientIpPort().c_str());
-                            }
+                    miniConsole.AddLineWarning("Client %s haven't send their key, can't proceed data", this->getClientIpPort().c_str());
+                }
+            } else {
+                if(status == 2) {
+                    miniConsole.AddLineInfo("Client %s want to reauth, but not implemented", this->getClientIpPort().c_str());
+                } else {
+                    miniConsole.AddLine("Client %s sent data, remaining need to be sent: %d", this->getClientIpPort().c_str(), lastDataRemainingSize);
+                    if(lastDataRemainingSize == 0) {
+                        miniConsole.AddLine("Client %s complete sent data", this->getClientIpPort().c_str());
+                        std::vector<uint8_t> plainText;
+                        Message msg;
+                        crypt.decrypt(fullData, nonce, plainText);
+                        ret = assembleMessage((char*) plainText.data(), plainText.size(), msg);
+                        if(!ret) {
+                            miniConsole.AddLineError("Client %s can't setup message", this->getClientIpPort().c_str());
                         }
                     }
                 }
-            } else if(ret == 0) {
-                miniConsole.AddLineInfo("Client %s disconnected gracefully", this->getClientIpPort().c_str());
-                break;
-            } else if(ret < 0) {
-                /*
-                if (WSAGetLastError() != WSAEWOULDBLOCK) {
-                    miniConsole.AddLineWarning("is server force disconnecting?\n");
-                }
-                */
-                miniConsole.AddLineWarning("Client %s disconnected abruptedly\n", this->getClientIpPort().c_str());
-                break;
             }
-        }
-        this->active.store(false);
-    }
-
-    public:
-    char outputBuffer[BufferSize+3];
-    std::string inputBuffer;
-    std::atomic<bool> active;
-
-    ClientSession(const int& _socket, const sockaddr_in& _clientAddress) : socket(_socket), clientAddress(_clientAddress) {
-        init();
-    }
-
-    ClientSession(const ClientSession&) = delete;
-    // ClientSession(ClientSession&& rhs) {}
-
-    ~ClientSession() {
-        if(active) {
-            active = false;
-        }
-        shutdown(socket, SD_BOTH);
-        closesocket(socket);
-    }
-
-    std::string getClientIp() const {
-        return clientIp;
-    }
-
-    uint16_t getClientPort() const {
-        return clientPort;
-    }
-
-    std::string getClientIpPort() const {
-        return clientIp + ':' + to_string(getClientPort());
-    }
-
-    int getClientSocket() const {
-        return socket;
-    }
-
-    std::string getConnectionDuration() const {
-        auto now = std::chrono::system_clock::now();
-        auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now - connectionTime);
-        return std::to_string(seconds.count()) + "s";
-    }
-
-    std::string makeWidgetName(const std::string& name, const std::string& postfix = "") const {
-        std::string ret;
-        ret = name + "##" + this->getClientIpPort() + '_' + postfix;
-        return ret;
-    }
-};
-
-class ClientVector {
-    private:
-    std::mutex clientVecMutex;
-    std::vector<ClientSession*> clientVec;
-
-    public:
-    ClientVector() = default;
-    ~ClientVector() {
-        for(auto ite = clientVec.begin(); ite != clientVec.end(); ite++) {
-            delete *ite;
-        }
-    }
-    void removeClosed() {
-        std::lock_guard<std::mutex> lock(clientVecMutex);
-        auto removePtr = std::remove_if(clientVec.begin(), clientVec.end(), [](ClientSession*& c) {
-            return !c->active.load();
-        });
-
-        for(auto ite = removePtr; ite != clientVec.end(); ite++) {
-            delete *ite;
-        }
-
-        clientVec.erase(removePtr, clientVec.end());
-    }
-
-    void pushBack(ClientSession* c) {
-        std::lock_guard<std::mutex> lock(clientVecMutex);
-        clientVec.emplace_back(c);
-    }
-
-    int size() {
-        std::lock_guard<std::mutex> lock(clientVecMutex);
-        return (int) clientVec.size();
-    }
-
-    ClientSession*& operator[](int index) {
-        std::lock_guard<std::mutex> lock(clientVecMutex);
-        return clientVec.at(index);
-    }
-} clientVector;
-
-class ServerConnectionManager {
-private:
-    std::atomic<int> socketfile{-1};
-    std::atomic<bool> running{false};
-
-    bool isInvalidAddress(sockaddr_in* addr) {
-        // Filter 0.0.0.0:0
-        if (addr->sin_addr.s_addr == 0 && addr->sin_port == 0) return true;
-        
-        // Filter broadcast addresses
-        if (addr->sin_addr.s_addr == INADDR_BROADCAST) return true;
-
-        return false;
-    }
-
-    void acceptClientLoop() {
-        sockaddr_in incomingAddress;
-        const int incomingAddressSize = sizeof(incomingAddress);
-        while(running.load()) {
-            int incomingSocket = (int) accept(socketfile, (sockaddr*) &incomingAddress, const_cast<int*>(&incomingAddressSize));
-            if(incomingSocket == -1) continue;  //skip?
-            if(isInvalidAddress(&incomingAddress)) closesocket(incomingSocket);
-            ClientSession *clientInstance = new ClientSession(incomingSocket, incomingAddress);
-            miniConsole.AddLineSuccess("client %s connected!\n", clientInstance->getClientIpPort().c_str());
-            clientVector.pushBack(clientInstance);
-        }
-    }
-
-public:
-    void init() {
-        int newSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-        if (newSocket == -1) {
-            running.store(false);
-            // throw std::runtime_error("socket failed");
-        }
-        int reuse = 1;
-        setsockopt(newSocket, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
-
-        sockaddr_in sa;
-        memset(&sa, 0, sizeof(sa));
-        sa.sin_family = AF_INET;
-        sa.sin_port = htons(DEFAULT_PORT);
-        sa.sin_addr.s_addr = htonl(INADDR_ANY);
-
-        if (bind(newSocket, (sockaddr*)&sa, sizeof(sa)) == -1) {
-            closesocket(newSocket);
-            running.store(false);
-            // throw std::runtime_error("bind failed");
-        }
-
-        if (listen(newSocket, SOMAXCONN) == SOCKET_ERROR) {
-            closesocket(newSocket);
-            running.store(false);
-            // throw std::runtime_error("listen failed");
-        }
-
-        socketfile.store(newSocket);
-        running.store(true);
-        miniConsole.AddLineSuccess("Server initialized!");
-
-        ThreadWrapper looper(ServerConnectionManager::acceptClientLoop, this);
-    }
-
-    ServerConnectionManager() {
-        // init();
-    }
-
-    ~ServerConnectionManager() {
-        disconnect();
-    }
-
-    void disconnect() {
-        if (!running.load()) return;
-        int currentSocket = socketfile.load();
-        if(currentSocket != -1) {
-            shutdown(currentSocket, SD_BOTH);
-            closesocket(currentSocket);
-        }
-        
-        socketfile.store(-1);
-        running.store(false);
-    }
-
-    bool sendData(ClientSession *c, const Message& msg) {
-        char *data;
-        int dataSize;
-        int ret = prepareMessage(msg, data, dataSize, NULL);
-        if(!ret) {
-            miniConsole.AddLineError("Failed to prepare message for %s\n", c->getClientIpPort().c_str());
-            return 0;
-        }
-        std::vector<uint8_t> dataVec(dataSize, 0);
-        std::vector<uint8_t> cipherText;
-        std::array<uint8_t, 12> nonce;
-
-        uint8_t *dataVecPtr = dataVec.data();
-        memcpy(dataVecPtr, data, dataSize);
-        delete[] data;
-        crypt.encrypt(dataVec, cipherText, nonce);
-        int cipherTextSizeRemaining = cipherText.size();
-
-        int sent = 0;
-        while(cipherTextSizeRemaining > 0) {
-            sent = send(c->getClientSocket(), (char*) cipherText.data()+sent, cipherTextSizeRemaining, 0);
-            if(sent == -1) {
-                miniConsole.AddLineError("Failed to send complete message to %s\n", c->getClientIpPort().c_str());
-                return 0;
+        } else if(ret == 0) {
+            miniConsole.AddLineInfo("Client %s disconnected gracefully", this->getClientIpPort().c_str());
+            break;
+        } else if(ret < 0) {
+            /*
+            if (WSAGetLastError() != WSAEWOULDBLOCK) {
+                miniConsole.AddLineWarning("is server force disconnecting?\n");
             }
-            cipherTextSizeRemaining -= sent;
+            */
+            miniConsole.AddLineWarning("Client %s disconnected abruptedly\n", this->getClientIpPort().c_str());
+            break;
         }
-        return 1;
     }
-};
+    this->active.store(false);
+}
 
-ServerConnectionManager connectionManager;
+ClientSession::ClientSession(const int& _socket, const sockaddr_in& _clientAddress) : socket(_socket), clientAddress(_clientAddress) {
+    init();
+}
+
+ClientSession::~ClientSession() {
+    if(active) {
+        active = false;
+    }
+    shutdown(socket, SD_BOTH);
+    closesocket(socket);
+}
+
+/////////////////////////////////////////////////////// 
+
+void ClientVector::removeClosed() {
+    std::lock_guard<std::mutex> lock(clientVecMutex);
+    auto removePtr = std::remove_if(clientVec.begin(), clientVec.end(), [](ClientSession*& c) {
+        return !c->active.load();
+    });
+
+    for(auto ite = removePtr; ite != clientVec.end(); ite++) {
+        delete *ite;
+    }
+
+    clientVec.erase(removePtr, clientVec.end());
+}
+
+void ClientVector::pushBack(ClientSession* c) {
+    std::lock_guard<std::mutex> lock(clientVecMutex);
+    clientVec.emplace_back(c);
+}
+
+int ClientVector::size() {
+    std::lock_guard<std::mutex> lock(clientVecMutex);
+    return (int) clientVec.size();
+}
+
+ClientSession*& ClientVector::operator[](int index) {
+    std::lock_guard<std::mutex> lock(clientVecMutex);
+    return clientVec.at(index);
+}
+
+///////////////////////////////
 
 void RunGui() {
     ImGuiIO& io = ImGui::GetIO(); (void)io;

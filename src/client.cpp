@@ -70,6 +70,13 @@ private:
         int lastDataRemainingSize = 0;
         std::array<uint8_t, 12> nonce;
 
+        //send public key
+        if(sendPublicKey()) {
+            miniConsole.AddLineError("Successfully  send public key to server");
+        } else {
+            miniConsole.AddLineError("Failed to send public key to server");
+        }
+
         while (connected.load()) {
             memset(buf, 0, sizeof(buf));
             int bytesReceived = recv(socketfile.load(), buf, BufferSize, 0);
@@ -183,14 +190,65 @@ public:
         connected.store(false);
     }
 
-    int sendData(const char* data, size_t length) {
-        if (!connected.load()) return -1;
+    int sendData(const Message& msg) {
+        char *data;
+        int dataSize;
+        int ret = prepareMessage(msg, data, dataSize, NULL);
+        if(!ret) {
+            miniConsole.AddLineError("Failed to prepare message");
+            return 0;
+        }
+        std::vector<uint8_t> dataVec(dataSize, 0);
+        std::vector<uint8_t> cipherText;
+        std::array<uint8_t, 12> nonce;
+        
+        uint8_t *dataVecPtr = dataVec.data();
+        memcpy(dataVecPtr, data, dataSize);
+        delete[] data;
+        crypt.encrypt(dataVec, cipherText, nonce);
+        
+        uint8_t *noncePtr = nonce.data();
+        uint8_t *cipherTextPtr = cipherText.data();
 
-        std::lock_guard<std::mutex> lock(socketMutex);
-        int currentSocket = socketfile.load();
-        if (currentSocket == -1) return -1;
+        std::vector<uint8_t> fullEncryptedSegment (cipherText.size() + 24, 0);
+        int fullEncryptedSegmentSize = (int) fullEncryptedSegment.size();
+        uint8_t *fullEncryptedSegmentPtr = fullEncryptedSegment.data();
+        memcpy(fullEncryptedSegmentPtr, "ZZTE", 4);
+        memcpy(fullEncryptedSegmentPtr+4, &fullEncryptedSegmentSize, 4);
+        memcpy(fullEncryptedSegmentPtr+8, noncePtr, 12);
+        memcpy(fullEncryptedSegmentPtr+24, cipherTextPtr, cipherText.size());
+        int remaining = fullEncryptedSegment.size();
 
-        return send(currentSocket, data, (int) length, 0);
+        int sent = 0;
+        while(remaining > 0) {
+            sent = send(this->socketfile.load(), (char*) cipherText.data()+sent, remaining, 0);
+            if(sent == -1) {
+                miniConsole.AddLineError("Failed to send complete message");
+                return 0;
+            }
+            remaining -= sent;
+        }
+        return 1;
+    }
+
+    int sendPublicKey() {
+        char tbuf[40];
+        tbuf[0] = 'Z';
+        tbuf[1] = 'Z';
+        tbuf[2] = 'T';
+        tbuf[3] = 'E';
+        tbuf[4] = (char) 0xff;
+        tbuf[5] = (char) 0xff;
+        tbuf[6] = (char) 0xff;
+        tbuf[7] = (char) 0xff;
+        std::array<uint8_t, 32> tpubkey = crypt.getPublicKey();
+        memcpy(tbuf+8, tpubkey.data(), 32);
+
+        int sent = send(this->socketfile.load(), tbuf, 40, 0);
+        if(sent != 40) {
+            return 0;
+        }
+        return 1;
     }
 
     ~ClientConnectionManager() {
