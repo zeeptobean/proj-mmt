@@ -97,7 +97,7 @@ int assembleMessage(const char *bindata, int size, Message& msg, std::string *er
     int binarySize = size - 16 - jsonSize;
     if (binarySize > 0) {
         msg.setBinaryData(bindata + 16 + jsonSize, binarySize);
-        return 0;
+        return 1;
     }
     
     return 1;

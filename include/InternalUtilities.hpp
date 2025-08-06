@@ -62,7 +62,7 @@ inline void PrintHexByteArray(const std::string& prefix, uint8_t *arr, int size,
     printf("\n");
 }
 
-bool memcpyToVector(std::vector<uint8_t>& dest, const void* src, size_t byte_count) {    
+inline bool memcpyToVector(std::vector<uint8_t>& dest, const void* src, size_t byte_count) {    
     size_t destByteCount = dest.size() / sizeof(uint8_t);
     if(destByteCount < byte_count) {
         ::memcpy(dest.data(), src, destByteCount);
@@ -84,13 +84,14 @@ bool memcpyToArray(std::array<uint8_t, N>& dest, const void* src, size_t byte_co
     }
 }
 
-void* secureZeroMemory(void* ptr, size_t num) {
+inline void* secureZeroMemory(void* ptr, size_t num) {
     if(!ptr) return nullptr;
     #ifdef WIN32
-    SecureZeroMemory(ptr, num);
+    return SecureZeroMemory(ptr, num);
     #else 
     volatile unsigned char *p = (volatile unsigned char *)ptr;
     while (num--) *p++ = 0;
+    return p;
     #endif
 }
 

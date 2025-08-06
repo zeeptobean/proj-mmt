@@ -1,16 +1,7 @@
-#define WIN32_LEAN_AND_MEAN
+
 #define UNICODE
-#ifdef WIN32
-#include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#endif
+
+#include <bits/stdc++.h>
 
 #include <SFML/Graphics.hpp>
 #include <SFML/Network.hpp>
@@ -18,21 +9,16 @@
 #include <imgui.h>
 #include <imgui-SFML.h>
 
-#include <bits/stdc++.h>
+#include "PeerConnection.hpp"
 #include "ThreadWrapper.hpp"
 #include "ImGuiStdString.hpp"
 #include "ImGuiScrollableText.hpp"
 #include "Message.hpp"
-#include "CryptHandler.hpp"
 #include "ClientUIState.hpp"
 #include "InternalUtilities.hpp"
-#include "PeerConnection.hpp"
-using namespace std;
 
 #define DEFAULT_BUFLEN 2048
 #define DEFAULT_PORT 62300
-const int BufferSize = 2048;
-char buf[BufferSize+1];
 
 sf::SoundBuffer connectedSoundBuffer, disconnectedSoundBuffer;
 sf::Sound connectedSound, disconnectedSound;
@@ -40,8 +26,6 @@ sf::Sound connectedSound, disconnectedSound;
 std::mutex socketMutex;
 
 std::string inputBuffer;
-
-CryptHandler crypt;
 
 GuiScrollableTextDisplay miniConsole;
 
@@ -59,26 +43,108 @@ int MessageExecute(const Message& inputMessage, Message& outputMessage) {
     return 0;
 }
 
-Peer
+class ServerConnection : public PeerConnection {
+public:
+    std::atomic<bool> connecting{false};
+
+    bool connectToServer(const std::string& address = "127.0.0.1", uint16_t port = DEFAULT_PORT) {
+        if (connecting.load() || active.load()) return false;
+
+        connecting.store(true);
+
+        std::lock_guard<std::mutex> lock(socketMutex);
+        int newSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (newSocket == -1) {
+            connecting.store(false);
+            return false;
+        }
+
+        // Set socket options
+        int reuse = 1;
+        setsockopt(newSocket, SOL_SOCKET, SO_REUSEADDR, 
+                  reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+
+        sockaddr_in sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sin_family = AF_INET;
+        sa.sin_port = htons(port);
+        inet_pton(AF_INET, address.c_str(), &sa.sin_addr);
+
+        if (connect(newSocket, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == -1) {
+            closesocket(newSocket);
+            connecting.store(false);
+            return false;
+        }
+
+        socketfile.store(newSocket);
+        connecting.store(false);
+        peerIp = address;
+        peerPort = port;
+        connectionTime = std::chrono::system_clock::now();
+        active.store(true);
+
+        // Start listener thread
+        std::thread([this]() {
+            listenToServer();
+        }).detach();
+
+        return sendPublicKey();
+    }
+
+private:
+    void listenToServer() {
+        while (active.load()) {
+            auto status = receiveData();
+            switch (status) {
+                case ReceiveStatus::Success: {
+                    Message msg;
+                    if (processCompleteMessage(msg)) {
+                        Message outMsg;
+                        if (MessageExecute(msg, outMsg)) {
+                            miniConsole.AddLineSuccess("Successfully execute message");
+                        }
+                    }
+                    break;
+                }
+                case ReceiveStatus::KeyExchange:
+                    miniConsole.AddLineSuccess("Successfully exchange key");
+                    break;
+                case ReceiveStatus::PeerDisconnected:
+                    miniConsole.AddLineWarning("Disconnected from server");
+                    break;
+                case ReceiveStatus::NeedMoreData:
+                    // Wait for more data
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    break;
+                case ReceiveStatus::Error:
+                    break;
+            }
+        }
+    }
+};
+
+ServerConnection connectionManager;
 
 void RunGui() {
     ImGuiIO& io = ImGui::GetIO(); (void)io;
 
     ImGui::Begin("Client", nullptr, ImGuiWindowFlags_None);
     
-    // Connection status section
     ImGui::SeparatorText("Connection Status");
-    if (connectionManager.isConnected()) {
+    if (connectionManager.isActive()) {
         ImGui::TextColored(ImVec4(0, 1, 0, 1), "Status: Connected");
         if (ImGui::Button("Disconnect")) {
             std::thread([] {
                 connectionManager.disconnect();
+                miniConsole.AddLineInfo("Self-disconnected");
+                disconnectedSound.play();
             }).detach();
         }
-    } else if (connectionManager.isConnecting()) {
+    } else if (connectionManager.connecting.load()) {
         ImGui::TextColored(ImVec4(1, 1, 0, 1), "Status: Connecting...");
         if (ImGui::Button("Cancel")) {
             connectionManager.disconnect();
+            connectionManager.connecting.store(false);
         }
     } else {
         ImGui::TextColored(ImVec4(1, 0, 0, 1), "Status: Disconnected");
@@ -90,12 +156,20 @@ void RunGui() {
             }).detach();
         }
     }
-    if (connectionManager.isConnected()) {
+    if (connectionManager.isActive()) {
         ImGui::SeparatorText("Raw messages received");
         if (ImGui::BeginChild("Messages", ImVec2(-1, 150), true)) {
             ImGui::TextWrapped("%s", ClientUIState::getInstance().getRawMessage().c_str());
+            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+                ImGui::SetScrollHereY(1.0f);
+            }
         }
         ImGui::EndChild();
+
+        //Clear button
+        if (ImGui::Button("Clear Messages")) {
+            ClientUIState::getInstance().setRawMessage("");
+        }
     }
     ImGui::SeparatorText("Console");
     miniConsole.Draw();
