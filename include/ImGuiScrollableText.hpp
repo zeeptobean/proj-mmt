@@ -7,6 +7,7 @@
 #include <mutex>
 #include <memory>
 #include <imgui.h>
+#include "InternalUtilities.hpp"
 
 class GuiScrollableTextDisplay {
 public:
@@ -84,6 +85,4 @@ private:
 
     // Common implementation
     void AddLineImpl(const std::string& text, ImU32 color);
-
-    std::string GetCurrentTimestamp();
 };

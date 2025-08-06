@@ -53,7 +53,7 @@ class Message {
 
     private:
     char magicNumber[4] = {'Z', 'Z', 'T', 'T'};
-    int segmentSize;
+    int segmentSize = 16;   //default
 
     char *binaryData = nullptr;
     int binaryDataSize = 0;
