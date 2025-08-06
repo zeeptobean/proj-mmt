@@ -95,4 +95,25 @@ inline void* secureZeroMemory(void* ptr, size_t num) {
     #endif
 }
 
+inline std::string getCurrentIsoTime() {
+    using namespace std::chrono;
+    
+    // Get current time
+    auto now = system_clock::now();
+    auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
+    auto timer = system_clock::to_time_t(now);
+    
+    // Convert to tm struct
+    struct tm *tm = localtime(&timer);
+    
+    // Format as string
+    char buffer[81];
+    strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H-%M-%S", tm);
+
+    std::string tstr = std::string(buffer);
+    snprintf(buffer, 80, "%s.%.3lld", tstr.c_str(), ms.count());
+    tstr = std::string(buffer);
+    return tstr;
+}
+
 #endif

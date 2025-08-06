@@ -9,7 +9,8 @@ void Message::setJsonData(const json& j) {
     delete[] jsonData;
     std::string jdump = j.dump();
     jsonDataSize = jdump.size(); 
-    jsonData = new char[jsonDataSize];
+    jsonData = new char[jsonDataSize+1];
+    memset(jsonData, 0, jsonDataSize);
     memcpy(jsonData, jdump.data(), jsonDataSize);
     setSegmentSize();
 }
@@ -24,7 +25,8 @@ int Message::getJsonDataSize() const {
 
 void Message::setBinaryData(const char *tbuf, int tsize) {
     delete[] binaryData;
-    binaryData = new char[tsize];
+    binaryData = new char[tsize+1];
+    memset(binaryData, 0, tsize+1);
     memcpy(binaryData, tbuf, tsize);
     binaryDataSize = tsize;
     setSegmentSize();

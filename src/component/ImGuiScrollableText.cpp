@@ -92,7 +92,7 @@ void GuiScrollableTextDisplay::AddLineImpl(const std::string& text, ImU32 color)
     // Get current time if timestamps are enabled
     std::string timestamp;
     if (showTimestamps) {
-        timestamp = GetCurrentTimestamp() + ": ";
+        timestamp = getCurrentIsoTime() + ": ";
     }
 
     // Add to history
@@ -105,22 +105,4 @@ void GuiScrollableTextDisplay::AddLineImpl(const std::string& text, ImU32 color)
     
     // Auto-scroll will happen on next draw
     scrollToBottom = autoScroll;
-}
-
-std::string GuiScrollableTextDisplay::GetCurrentTimestamp() {
-    using namespace std::chrono;
-    
-    // Get current time
-    auto now = system_clock::now();
-    auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
-    auto timer = system_clock::to_time_t(now);
-    
-    // Convert to tm struct
-    struct tm *tm = localtime(&timer);
-    
-    // Format as string
-    char buffer[80];
-    strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", tm);
-    
-    return std::string(buffer) + "." + std::to_string(ms.count());
 }

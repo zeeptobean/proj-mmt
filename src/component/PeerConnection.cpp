@@ -54,6 +54,10 @@ bool PeerConnection::sendData(const Message& msg) {
         return false;
     }
 
+    if(!crypt.checkOtherPublicKeyStatus()) {
+        return false;
+    }
+
     std::vector<uint8_t> dataVec(data, data + dataSize);
     delete[] data;
 
