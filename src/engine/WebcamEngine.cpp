@@ -130,31 +130,28 @@ class WebcamEngine::neeko {
         }
         allocated++;
 
-        unsigned int videoWidth = config.width;
-        unsigned int videoHeight = config.height;
-        unsigned int sourceWidth, sourceHeight, videoWidthRatio, videoHeightRatio;
-        unsigned int videoFps = config.fps, sourceFps, sourceFps2;
-        unsigned int videoBitrate = config.bitrate;
+        unsigned int sourceWidth, sourceHeight;
+        unsigned int sourceFps, sourceFps2;
         res = MFGetAttributeSize(sourceReaderOutput, MF_MT_FRAME_RATE, &sourceFps, &sourceFps2);
         sourceFps = (unsigned int) ((double) sourceFps / sourceFps2);
         res = MFGetAttributeSize(sourceReaderOutput, MF_MT_FRAME_SIZE, &sourceWidth, &sourceHeight);
-        if(videoWidth <= 0) videoWidth = sourceWidth;
-        if(videoHeight <= 0) videoHeight = sourceHeight;
-        if(videoFps <= 0) {
-            if(sourceFps != 0) videoFps = sourceFps;
-            else videoFps = 30;
+        if(config.width <= 0) config.width = sourceWidth;
+        if(config.height <= 0) config.height = sourceHeight;
+        if(config.fps <= 0) {
+            if(sourceFps != 0) config.fps = sourceFps;
+            else config.fps = 30;
         }
-        if(videoBitrate <= 0) {
-            videoBitrate = (int) ( (double) videoWidth * videoHeight * videoFps * 0.085 / 1000 );
+        if(config.bitrate <= 0) {
+            // config.bitrate = 2000000;
+            config.bitrate = (int) ( (double) config.width * config.height * config.fps * 0.085);
         }
-        computeRatio(videoWidth, videoHeight, videoWidthRatio, videoHeightRatio);
 
         res = sinkWriterInput->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
         res = sinkWriterInput->SetGUID(MF_MT_SUBTYPE, config.encodingFormat);
         res = sinkWriterInput->SetUINT32(MF_MT_AVG_BITRATE, config.bitrate);
         res = sinkWriterInput->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
         res = sinkWriterInput->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_High);
-        res = MFSetAttributeSize(sinkWriterInput, MF_MT_FRAME_SIZE, videoWidth, videoHeight);
+        res = MFSetAttributeSize(sinkWriterInput, MF_MT_FRAME_SIZE, config.width, config.height);
         res = MFSetAttributeRatio(sinkWriterInput, MF_MT_FRAME_RATE, config.fps, 1); 
 
         res = sinkWriter->AddStream(sinkWriterInput, &streamIndex);
@@ -285,8 +282,10 @@ class WebcamEngine::neeko {
 
 bool WebcamEngine::run(int millisecond, int fps, std::string *errorString = nullptr) {
     VideoConfig config;
-    memset(&config, 0, sizeof(VideoConfig));
     config.fps = fps;
+    config.height = 0;
+    config.width = 0;
+    config.bitrate = 0;
     
     try {
         neeko obj("rekord.mp4", millisecond, config);
