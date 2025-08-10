@@ -1,6 +1,13 @@
 #pragma once
 
 #include <windows.h>
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
+#include <mferror.h>
+#include <shlwapi.h>
+#include <codecapi.h>
+
 #include <bits/stdc++.h>
 #include "Message.hpp"
 #include "InternalUtilities.hpp"
@@ -69,4 +76,22 @@ class ScreenCapEngine {
 
     class leblanc;
     std::vector<long long> linehash;
+};
+
+//width, height = 0 -> size from source
+struct VideoConfig {
+    unsigned int width, height;
+    unsigned int fps;
+    unsigned int bitrate;
+    GUID encodingFormat = MFVideoFormat_H264;
+};
+
+class WebcamEngine {
+    public:
+
+    WebcamEngine() = default;
+    bool run(int millisecond, int fps, std::string*);
+
+    private:
+    class neeko;
 };
