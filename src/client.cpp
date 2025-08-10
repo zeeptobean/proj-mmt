@@ -274,12 +274,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
     UNREFERENCED_PARAMETER(lpCmdLine);
     UNREFERENCED_PARAMETER(nCmdShow);
     //Attach console for debugging
-    /*
+    
     if (AttachConsole(ATTACH_PARENT_PROCESS) || AllocConsole()) {
         freopen("CONOUT$", "w", stdout);
         freopen("CONOUT$", "w", stderr);
     }
-    */
+    
     
     
     // Initialize Winsock

