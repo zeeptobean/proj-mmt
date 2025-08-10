@@ -41,7 +41,8 @@ void PeerConnection::disconnect() {
     }
     
     receiveBuffer.clear();
-    remainingDataSize = 0;
+    remainingPayloadSize = 0;
+    writtenPayloadSize = 0;
     socketfile.store(-1);
 }
 
@@ -68,10 +69,10 @@ bool PeerConnection::sendData(const Message& msg) {
     }
 
     std::vector<uint8_t> fullEncryptedSegment(cipherText.size() + 24, 0);
-    int fullEncryptedSegmentSize = static_cast<int>(fullEncryptedSegment.size());
+    int payloadSize = (int) cipherText.size();
     
     memcpy(fullEncryptedSegment.data(), "ZZTE", 4);
-    memcpy(fullEncryptedSegment.data()+4, &fullEncryptedSegmentSize, 4);
+    memcpy(fullEncryptedSegment.data()+4, &payloadSize, 4);
     memcpy(fullEncryptedSegment.data()+8, nonce.data(), 12);
     memcpy(fullEncryptedSegment.data()+24, cipherText.data(), cipherText.size());
 
@@ -155,67 +156,75 @@ PeerConnection::ReceiveStatus PeerConnection::receiveData() {
         return ReceiveStatus::PeerDisconnected;
     }
 
-    if (remainingDataSize == 0) {
-        // New message
-        if (bytesReceived < 8) {
-            active.store(false);
-            return ReceiveStatus::Error;
-        }
-        
-        if (memcmp(tempBuffer.data(), "ZZTE", 4) != 0) {
+    const uint8_t* pData = tempBuffer.data();
+    int processedBytes = 0;
+
+    if (remainingPayloadSize == 0) {
+        const int HEADER_SIZE = 24; // 4 magic + 4 size + 4 reserved + 12 nonce
+        const int KEY_EXCHANGE_SIZE = 40; // 4 magic + 4 size(-1) + 32 key
+
+        if (bytesReceived < HEADER_SIZE) {
             active.store(false);
             return ReceiveStatus::Error;
         }
 
-        int totalSize;
-        memcpy(&totalSize, tempBuffer.data()+4, 4);
-        
-        if (totalSize == -1) {
-            // Key exchange
-            if (bytesReceived < 40) {
+        if (memcmp(pData, "ZZTE", 4) != 0) {
+            active.store(false);
+            return ReceiveStatus::Error;
+        }
+
+        int payloadSize;
+        memcpy(&payloadSize, pData + 4, 4);
+
+        if (payloadSize == -1) {
+            if (bytesReceived < KEY_EXCHANGE_SIZE) {
                 active.store(false);
                 return ReceiveStatus::Error;
             }
-            
             std::array<uint8_t, 32> pubKey;
-            memcpy(pubKey.data(), tempBuffer.data()+8, 32);
+            memcpy(pubKey.data(), pData + 8, 32);
             crypt.setOtherPublicKey(pubKey);
             return ReceiveStatus::KeyExchange;
-        } else {
-            if (totalSize <= 0) {
-                active.store(false);
-                return ReceiveStatus::Error;
-            }
-            
-            if (bytesReceived < 24) {
-                active.store(false);
-                return ReceiveStatus::Error;
-            }
-            
-            size_t payloadSize = bytesReceived - 24;
-            memcpy(currentNonce.data(), tempBuffer.data()+8, 12);
-            receiveBuffer.resize(payloadSize);
-            memcpy(receiveBuffer.data(), tempBuffer.data()+24, payloadSize);
-            
-            remainingDataSize = totalSize - bytesReceived;
-            
-            if (remainingDataSize <= 0) {
-                remainingDataSize = 0;
-                return ReceiveStatus::Success;
-            }
-            return ReceiveStatus::NeedMoreData;
         }
-    } else {
-        // Continuation of existing message
-        size_t oldSize = receiveBuffer.size();
-        receiveBuffer.resize(oldSize + bytesReceived);
-        memcpy(receiveBuffer.data() + oldSize, tempBuffer.data(), bytesReceived);
-        remainingDataSize -= bytesReceived;
         
-        if (remainingDataSize <= 0) {
-            remainingDataSize = 0;
-            return ReceiveStatus::Success;
+        if (payloadSize <= 0) {
+            active.store(false);
+            return ReceiveStatus::Error;
         }
+
+        memcpy(currentNonce.data(), pData + 8, 12);
+
+        // int reserved;
+        // memcpy(&reserved, pData + 20, 4);
+
+        receiveBuffer.resize(payloadSize, 0);
+        remainingPayloadSize = payloadSize;
+        writtenPayloadSize = 0;
+
+        size_t payloadInThisChunk = bytesReceived - HEADER_SIZE;
+        if (payloadInThisChunk > 0) {
+            memcpy(receiveBuffer.data(), pData + HEADER_SIZE, payloadInThisChunk);
+            writtenPayloadSize += payloadInThisChunk;
+            remainingPayloadSize -= payloadInThisChunk;
+        }
+        
+    } else {
+        int bytesToCopy = bytesReceived;
+        if (bytesToCopy > remainingPayloadSize) {
+            bytesToCopy = remainingPayloadSize;
+        }
+
+        memcpy(receiveBuffer.data() + writtenPayloadSize, pData, bytesToCopy);
+        
+        writtenPayloadSize += bytesToCopy;
+        remainingPayloadSize -= bytesToCopy;
+    }
+
+    if (remainingPayloadSize <= 0) {
+        remainingPayloadSize = 0;
+        writtenPayloadSize = 0;
+        return ReceiveStatus::Success;
+    } else {
         return ReceiveStatus::NeedMoreData;
     }
 }

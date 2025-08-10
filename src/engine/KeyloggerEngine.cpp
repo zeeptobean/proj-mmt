@@ -108,8 +108,6 @@ bool KeyloggerEngine::init() {
 void KeyloggerEngine::shouldStop() {
     if (hookThreadId != 0) {
         PostThreadMessageW(hookThreadId, WM_QUIT, 0, 0);
-    if (hookThreadId != 0) {
-        PostThreadMessageW(hookThreadId, WM_QUIT, 0, 0);
     }
 }
 

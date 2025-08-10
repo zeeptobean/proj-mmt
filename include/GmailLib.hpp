@@ -11,7 +11,7 @@
 
 #include <bits/stdc++.h>
 #include <curl/curl.h>
-#include "../nlohmann/json.hpp"
+#include "nlohmann/json.hpp"
 #include "UrlUtilities.hpp"
 
 using json = nlohmann::json;

@@ -3,6 +3,9 @@
 
 #ifdef WIN32
 #include <windows.h>
+#else
+#include <sys/stat.h>
+#include <errno.h>
 #endif
 
 #include <string>
@@ -114,6 +117,33 @@ inline std::string getCurrentIsoTime() {
     snprintf(buffer, 80, "%s.%.3lld", tstr.c_str(), ms.count());
     tstr = std::string(buffer);
     return tstr;
+}
+
+inline bool CreateDirectoryCrossPlatform(const std::string& path) {
+    std::wstring wpath;
+    (void) StringToWideString(path, wpath);
+    #ifdef WIN32
+        if(CreateDirectoryW(wpath.c_str(), NULL)) {
+            return true;
+        } else {
+            DWORD error = GetLastError();
+            if (error == ERROR_ALREADY_EXISTS) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+    #else // Linux/Unix-like systems
+        if (mkdir(path.c_str(), 0777) == 0) {
+            return true;
+        } else {
+            if (errno == EEXIST) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+    #endif
 }
 
 #endif

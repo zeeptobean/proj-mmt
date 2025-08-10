@@ -1,5 +1,31 @@
 #include "Message.hpp"
 
+Message::Message(const Message& rhs) {
+    *this = rhs;
+}
+
+Message& Message::operator=(const Message& rhs) {
+    if(&rhs != this) {
+        commandNumber = rhs.commandNumber;
+        returnCode = rhs.returnCode;
+        reserved = rhs.reserved;
+
+        jsonDataSize = rhs.jsonDataSize;
+        binaryDataSize = rhs.binaryDataSize;
+        delete[] jsonData;
+        jsonData = new char[jsonDataSize+1];
+        memset(jsonData, 0, jsonDataSize);
+        memcpy(jsonData, rhs.jsonData, jsonDataSize);
+        delete[] binaryData;
+        binaryData = new char[binaryDataSize+1];
+        memset(binaryData, 0, binaryDataSize);
+        memcpy(binaryData, rhs.binaryData, binaryDataSize);
+
+        setSegmentSize();
+        return *this;
+    }
+}
+
 Message::~Message() {
     delete[] binaryData;
     delete[] jsonData;
@@ -132,6 +158,7 @@ int prepareMessage(const Message& msg, char*& data, int& dataSize, std::string *
     return 1;
 }
 
+/*
 int proceedEncryptedMessage(const char *bindata, int size, std::vector<uint8_t>& fullData, int& lastDataRemainingSize, std::array<uint8_t, 12>& nonce, std::string *errorString) {
     if(lastDataRemainingSize == 0) {
         if (memcmp(bindata, "ZZTE", 4) != 0) {
@@ -172,3 +199,4 @@ int proceedEncryptedMessage(const char *bindata, int size, std::vector<uint8_t>&
         return 1;
     }
 }
+*/
