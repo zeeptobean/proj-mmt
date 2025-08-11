@@ -23,13 +23,14 @@
 #include "CryptHandler.hpp"
 #include "InternalUtilities.hpp"
 
-const int BufferSize = 4096;
+const int BufferSize = 65536;
 
 class PeerConnection {
 
     //shared for gui data etc
     struct FunctionalityStruct {
         int webcamDurationMs = 2000;
+        int webcamFps = 30;
         std::string rawText = "";
         bool isKeyloggerActive = false;
         bool isWebcamActive = false;

