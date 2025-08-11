@@ -22,8 +22,8 @@ Message& Message::operator=(const Message& rhs) {
         memcpy(binaryData, rhs.binaryData, binaryDataSize);
 
         setSegmentSize();
-        return *this;
     }
+    return *this;
 }
 
 Message::~Message() {

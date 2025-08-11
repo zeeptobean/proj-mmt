@@ -4,13 +4,14 @@ setlocal enabledelayedexpansion
 set BaseDir=..
 
 set Compiler=g++
-set CompilerFlag=-Wall -Wextra -pedantic -g -march=native
+set CompilerFlag=-Wall -Wextra -pedantic -Os -march=nehalem
 set IncludeFlag=-I.\%BaseDir%\include\
 set LinkingFlag=-lsodium -lws2_32 -lmf -lmfplat -lmfreadwrite -lmfuuid -lshlwapi -lole32 -loleaut32 -lrpcrt4 -lgdi32 -lgdiplus
 set ImGuiFlag=-I.\%BaseDir%\imgui-win32-dx9\include\ -L.\%BaseDir%\imgui-win32-dx9\lib\
 set ImGuiLinkingFlag=-limgui-win32-dx9  -ld3d9 -ldwmapi -luser32 -lwinmm
+set ReleaseFlag=-s -static -static-libgcc -static-libstdc++
 
-set EngineFlag=-Wall -Wextra -pedantic -Os -march=native 
+set EngineFlag=-Wall -Wextra -pedantic -Os -march=nehalem 
 
 if not exist "%BaseDir%\bin" (
     mkdir "%BaseDir%\bin"
@@ -47,9 +48,9 @@ for %%f in ("%BaseDir%\bin\engine\*.o" "%BaseDir%\bin\component\*.o") do (
 )
 
 echo Linking client
-%Compiler% -mwindows -municode %CompilerFlag% %ObjectFiles% "%BaseDir%\bin\client.o"  -o "%BaseDir%\bin\client.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
+%Compiler% -mwindows -municode %ReleaseFlag% %CompilerFlag% %ObjectFiles% "%BaseDir%\bin\client.o"  -o "%BaseDir%\bin\client.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
 
 echo Linking server
-%Compiler% %CompilerFlag% %ObjectFiles% "%BaseDir%\bin\server.o" -o "%BaseDir%\bin\server.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
+%Compiler% %ReleaseFlag% %CompilerFlag% %ObjectFiles% "%BaseDir%\bin\server.o" -o "%BaseDir%\bin\server.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
 
 endlocal
