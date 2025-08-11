@@ -214,15 +214,30 @@ void RunGui() {
             connectionManager.disconnect();
         }
     } else {
+        static char ipAddressBuffer[64] = "127.0.0.1";
+        static int portNumber = DEFAULT_PORT;
         ImGui::TextColored(ImVec4(1, 0, 0, 1), "Status: Disconnected");
+        ImGui::Text("IP Address:");
+        ImGui::SameLine();
+        if (ImGui::InputText("##IP", ipAddressBuffer, sizeof(ipAddressBuffer))) {
+            
+        }
+        ImGui::Text("Port:");
+        ImGui::SameLine();
+
+        if (ImGui::InputInt("##Port", &portNumber)) {
+            portNumber = std::max(1024, std::min(portNumber, 65535));
+        }
+
         if (ImGui::Button("Connect")) {
             std::thread([] {
-                if (connectionManager.connectToServer()) {
+                if (connectionManager.connectToServer(std::string(ipAddressBuffer), portNumber)) {
                     connectedSound.play();
                 }
             }).detach();
         }
     }
+
     if (connectionManager.isActive()) {
         ImGui::SeparatorText("Raw messages received");
         if (ImGui::BeginChild("GuiRawMessages", ImVec2(-1, 150), true)) {
