@@ -146,4 +146,11 @@ inline bool CreateDirectoryCrossPlatform(const std::string& path) {
     #endif
 }
 
+inline void allocateConsoleWin() {
+    if(AttachConsole(ATTACH_PARENT_PROCESS) || AllocConsole()) {
+        freopen("CONOUT$", "w", stdout);
+        freopen("CONOUT$", "w", stderr);
+    }
+}
+
 #endif

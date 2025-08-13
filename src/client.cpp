@@ -97,13 +97,13 @@ private:
                             Message outMsg;
                             if (MessageExecute(msg, outMsg)) {
                                 miniConsole.AddLineSuccess("Successfully execute message");
-                                if(this->sendData(outMsg)) {
-                                    miniConsole.AddLineSuccess("Successfully sent output message");
-                                } else {
-                                    miniConsole.AddLineSuccess("Failed to sent output message");
-                                }
                             } else {
                                 miniConsole.AddLineError("Failed to execute message");
+                            }
+                            if(this->sendData(outMsg)) {
+                                miniConsole.AddLineSuccess("Successfully sent output message");
+                            } else {
+                                miniConsole.AddLineSuccess("Failed to sent output message");
                             }
                         }).detach();
                     } else {

@@ -36,6 +36,7 @@ class PeerConnection {
         std::string getFileText = "";
         bool isKeyloggerActive = false;
         bool isWebcamActive = false;
+        bool isControlLocked = false;
 
         void reset() {
             webcamDurationMs = 2000;

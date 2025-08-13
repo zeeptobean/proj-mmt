@@ -16,12 +16,12 @@
 
 using json = nlohmann::json;
 
-const char *googleOAuthEndpoint = "https://accounts.google.com/o/oauth2/v2/auth";
-const char *googleTokenEndpoint = "https://oauth2.googleapis.com/token";
-const char *googleMailSendEndpoint = "https://www.googleapis.com/gmail/v1/users/me/messages/send";
-const char *googleMailboxEndpoint = "https://www.googleapis.com/gmail/v1/users/me/messages/";
-const char *appScope = "https://www.googleapis.com/auth/gmail.send%20https://www.googleapis.com/auth/gmail.readonly%20https://www.googleapis.com/auth/gmail.compose";
-const char *httpLocalhost = "http://localhost:";
+inline const char *googleOAuthEndpoint = "https://accounts.google.com/o/oauth2/v2/auth";
+inline const char *googleTokenEndpoint = "https://oauth2.googleapis.com/token";
+inline const char *googleMailSendEndpoint = "https://www.googleapis.com/gmail/v1/users/me/messages/send";
+inline const char *googleMailboxEndpoint = "https://www.googleapis.com/gmail/v1/users/me/messages/";
+inline const char *appScope = "https://www.googleapis.com/auth/gmail.send%20https://www.googleapis.com/auth/gmail.readonly%20https://www.googleapis.com/auth/gmail.compose";
+inline const char *httpLocalhost = "http://localhost:";
 
 class HTTPServer {
     private:
@@ -41,7 +41,7 @@ class HTTPServer {
 
     //1 if authorized, 0 if unauthorized, -1 if fail internally, -2 if state has been tampered, -3 if invalid request
     //this function can only be called ONCE
-    int run(std::string& retAuthCode, std::string *error_string);
+    int run(std::string& retAuthCode, std::string *error_string = nullptr);
 
     virtual ~HTTPServer();
 };
@@ -71,10 +71,14 @@ class GmailHandler {
     private:
     std::string clientId, clientSecret, redirectPort;
     std::string accessToken, refreshToken, accessTokenOld;
+    std::string credentialFilename;
     std::mutex accessTokenLock;
     std::mt19937 rng;
+    std::atomic<bool> isAuthenticated{false};
 
     void initRng();
+
+    void writeCredential();
 
     std::string make_state(size_t len = 8);
 
@@ -120,4 +124,4 @@ public:
 //@param response Response of the request
 //@param error_string Pointer for error description. Pass NULL if omitted
 //@return The HTTP status code. -1 if fail to make any request
-int inapp_post_or_get(int post_or_get, const std::string& url, const std::vector<std::string>& header_override, const std::string& post_field, std::string& response, std::string *error_string);
+int inapp_post_or_get(int post_or_get, const std::string& url, const std::vector<std::string>& header_override, const std::string& post_field, std::string& response, std::string *error_string = nullptr);

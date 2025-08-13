@@ -1,6 +1,8 @@
 #include "GmailLib.hpp"
 
-HTTPServer::HTTPServer(const uint16_t tport, const std::string& generated_state, bool tlogProcess = true) 
+const uint16_t DEFAULT_REDIRECT_PORT = 62397;
+
+HTTPServer::HTTPServer(const uint16_t tport, const std::string& generated_state, bool tlogProcess) 
                         : port(tport), state(generated_state), logProcess(tlogProcess) {
     allocated = 0;
 }
@@ -11,7 +13,7 @@ int HTTPServer::run(std::string& retAuthCode, std::string *error_string) {
     if(isCalled) return 1000;
     isCalled = true;
 
-    const std::string headerConst = "Server: zeept-test local response\r\nContent-type: text/html\r\n\r\n<body><h2>zeept-test project</h2>";
+    const std::string headerConst = "Server: project mmt local response\r\nContent-type: text/html\r\n\r\n<body><h2>project mmt</h2>";
     const std::pair<std::string, std::string> httpElement[] = {
         std::make_pair("HTTP/1.1 200 OK\r\n", "<h4>You have successfully authorized. Return to the application to continue</h4></body>\r\n"),
         std::make_pair("HTTP/1.1 401 Unauthorized\r\n", "<h4>You did not accept authorization.</h4></body>\r\n"),
@@ -196,7 +198,21 @@ void GmailHandler::initRng() {
     rng.seed((uint32_t) std::chrono::steady_clock::now().time_since_epoch().count());
 }
 
-std::string GmailHandler::make_state(size_t len = 8) {
+void GmailHandler::writeCredential() {
+    std::ofstream outfile(credentialFilename, std::ios::out | std::ios::binary);
+    if(!outfile) return;
+    
+    json jsonData;
+    jsonData["clientId"] = clientId;
+    jsonData["clientSecret"] = clientSecret;
+    jsonData["redirectPort"] = redirectPort;
+    jsonData["refreshToken"] = refreshToken;
+    std::string jsonStr = jsonData.dump(4);
+    outfile.write(jsonStr.data(), jsonStr.size());
+    outfile.close();
+}
+
+std::string GmailHandler::make_state(size_t len) {
     const char sample[] = "abcdef0123456789";
     std::string ret;
     for(size_t i=0; i < len; i++) {
@@ -229,12 +245,13 @@ GmailHandler::GmailHandler(std::string filename) {
     (void) loadCredential(filename, NULL);
 }
 
-bool GmailHandler::loadCredential(const std::string& filename, std::string *error_string = nullptr) {
+bool GmailHandler::loadCredential(const std::string& filename, std::string *error_string) {
     std::ifstream infile(filename);
     if (!infile.is_open()) {
         if(error_string) *error_string = "could not open credential file";
         return 0;
     }
+    this->credentialFilename = filename;
 
     json jsonData;
     try {
@@ -244,15 +261,18 @@ bool GmailHandler::loadCredential(const std::string& filename, std::string *erro
         return 0;
     }
 
-    if(!jsonData.contains("clientId") || !jsonData.contains("clientSecret") || !jsonData.contains("redirectPort")) {
+    if(!jsonData.contains("clientId") || !jsonData.contains("clientSecret")) {
         if(error_string) *error_string = "credential file missing required fields";
         return 0;
     }
 
     clientId = jsonData.at("clientId");
     clientSecret = jsonData.at("clientSecret");
-    redirectPort = jsonData.at("redirectPort");
-
+    redirectPort = std::to_string(DEFAULT_REDIRECT_PORT);
+    
+    if(jsonData.contains("redirectPort")) {
+        redirectPort = jsonData.at("redirectPort");
+    }
     if(jsonData.contains("refreshToken")) {
         refreshToken = jsonData.at("refreshToken");
     }
@@ -267,7 +287,7 @@ std::string GmailHandler::getRedirectPort() const { return redirectPort; }
 std::string GmailHandler::getAccessToken() const { return accessToken; }
 std::string GmailHandler::getRefreshToken() const { return refreshToken; }
 
-bool GmailHandler::auth(std::string *errorString = NULL) {
+bool GmailHandler::auth(std::string *errorString) {
     // 1. Get Authorization Code
     std::string state = make_state();
     std::string redirectUri = std::string(httpLocalhost) + redirectPort;
@@ -317,6 +337,8 @@ bool GmailHandler::auth(std::string *errorString = NULL) {
             if (json_response.contains("refresh_token")) {
                 refreshToken = json_response["refresh_token"];
             }
+            isAuthenticated.store(true);
+            this->writeCredential();
             if(errorString) *errorString = "OK";
             return true;
         } catch (const json::parse_error& e) {
@@ -333,7 +355,7 @@ bool GmailHandler::auth(std::string *errorString = NULL) {
     }
 }
 
-bool GmailHandler::reauth(std::string expiredAccessToken, std::string *errorString = NULL) {
+bool GmailHandler::reauth(std::string expiredAccessToken, std::string *errorString) {
     std::lock_guard<std::mutex> lock(accessTokenLock);
 
     if(expiredAccessToken != this->accessToken) {
@@ -382,10 +404,15 @@ bool GmailHandler::reauth(std::string expiredAccessToken, std::string *errorStri
  * @param access_token A valid OAuth 2.0 access token.
  * @param mimeMessage The complete, raw MIME message string, ready to be base64 encoded.
  */
-bool GmailHandler::sendEmail(const std::string& mimeMessage, std::string& messageIdOnSuccess, std::string *errorString = nullptr) {
+bool GmailHandler::sendEmail(const std::string& mimeMessage, std::string& messageIdOnSuccess, std::string *errorString) {
+    if(!isAuthenticated.load()) {
+        if(errorString) *errorString = "Not authenticated yet";
+        return false;
+    }
+
     if (mimeMessage.empty()) {
         if(errorString) *errorString = "Empty message";
-        return true;
+        return false;
     }
 
     std::vector<std::string> headers;
@@ -419,7 +446,12 @@ bool GmailHandler::sendEmail(const std::string& mimeMessage, std::string& messag
     return false;
 }
 
-bool GmailHandler::getEmail(const std::string& messageId, MailMessage& mailMsgRet, std::string *errorString = nullptr) {
+bool GmailHandler::getEmail(const std::string& messageId, MailMessage& mailMsgRet, std::string *errorString) {
+    if(!isAuthenticated.load()) {
+        if(errorString) *errorString = "Not authenticated yet";
+        return false;
+    }
+
     std::string url = googleMailboxEndpoint + messageId + "?format=full";
     std::vector<std::string> headers;
     headers.push_back("Authorization: Bearer " + this->getAccessToken());
@@ -467,7 +499,12 @@ bool GmailHandler::getEmail(const std::string& messageId, MailMessage& mailMsgRe
     return false;
 }
 
-bool GmailHandler::queryMessages(const std::string& query, std::vector<std::string>& messageIds, std::string *errorString = nullptr) {
+bool GmailHandler::queryMessages(const std::string& query, std::vector<std::string>& messageIds, std::string *errorString) {
+    if(!isAuthenticated.load()) {
+        if(errorString) *errorString = "Not authenticated yet";
+        return 0;
+    }
+
     messageIds.clear();
     std::string encoded_query = urlStringEscape(query);
     std::string url = "https://www.googleapis.com/gmail/v1/users/me/messages?q=" + encoded_query;

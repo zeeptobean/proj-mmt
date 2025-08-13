@@ -79,7 +79,8 @@ bool CryptHandler::decrypt(const std::vector<uint8_t>& cipherText, const std::ar
 std::array<uint8_t, 32> CryptHandler::makeSharedKey() {
     std::lock_guard<std::mutex> lock(sharedKeyLock);
     if (hasOtherPublicKey.load()) {
-        crypto_box_beforenm(sharedKey.data(), otherPublicKey.data(), secretKey.data());
+        int dummy = crypto_box_beforenm(sharedKey.data(), otherPublicKey.data(), secretKey.data());
+        (dummy) = (dummy);
     }
     hasSharedKey = true;
     return sharedKey;
