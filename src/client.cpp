@@ -184,6 +184,24 @@ int MessageExecute(const Message& inputMessage, Message& outputMessage) {
             (void) RestartEngine(inputMessage, outputMessage);
             return true;
         }
+        case MessageListFile: {
+            int status = ListFilehandler(inputMessage, outputMessage);
+            if(status) {
+                miniConsole.AddLineInfo("Listing directory");
+            } else {
+                miniConsole.AddLineError("CAn't Listing directory");
+            }
+            return status;
+        }
+        case MessageGetFile: {
+            int status = GetFileHandler(inputMessage, outputMessage);
+            if(status) {
+                miniConsole.AddLineInfo("Get file");
+            } else {
+                miniConsole.AddLineError("CAn't Get file");
+            }
+            return status;
+        }
         
         default: break;
     }

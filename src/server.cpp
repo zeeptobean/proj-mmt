@@ -82,7 +82,37 @@ private:
                 outfile.close();
                 miniConsole.AddLineInfo("webcam data saved to file %s", filename.c_str());
                 break;
-            } 
+            }
+
+            case MessageListFile: {
+                json jsonFileListingData = json::parse(std::string(msg.getBinaryData(), msg.getBinaryDataSize()));
+                std::string jsonBeautified = jsonFileListingData.dump(4);
+
+                std::string filename = serverTempFolderName + "/pathquery_" + getCurrentIsoTime() + ".json";
+                std::ofstream outfile(filename, std::ios::out | std::ios::binary);
+                if(!outfile) {
+                    miniConsole.AddLineError("listing directory failed to save to file");
+                    break;
+                }
+                outfile.write(jsonBeautified.c_str(), jsonBeautified.size());
+                outfile.close();
+                miniConsole.AddLineInfo("listing directory saved to file %s", filename.c_str());
+                break;
+            }
+
+            case MessageGetFile: {
+                json jsonData = json::parse(std::string(msg.getJsonData(), msg.getJsonDataSize()));
+                std::string filename = serverTempFolderName + '/' + (std::string) jsonData.at("fileName");
+                std::ofstream outfile(filename, std::ios::out | std::ios::binary);
+                if(!outfile) {
+                    miniConsole.AddLineError("get file failed to save to file");
+                    break;
+                }
+                outfile.write(msg.getBinaryData(), msg.getBinaryDataSize());
+                outfile.close();
+                miniConsole.AddLineInfo("get file saved to file %s", filename.c_str());
+                break;
+            }
         }
     }
 
@@ -331,7 +361,8 @@ public:
 ///////////////////////////////////////////////////
 
 void RunGui() {
-    ImGui::Begin("Server Panel", nullptr, ImGuiWindowFlags_None);
+    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_Once);
+    ImGui::Begin("Server Panel", nullptr, ImGuiWindowFlags_NoCollapse);
     ImGui::SeparatorText("Connected Clients");
     ImGui::Text("Active clients: %zu", clientVector.size());
     
@@ -342,7 +373,7 @@ void RunGui() {
         if (ImGui::CollapsingHeader(headerLabel.c_str())) {
             ImGui::Text("Connected for %llus", client.getConnectionDuration());
             
-            ImGui::InputTextMultiline(client.makeWidgetName("Message Input").c_str(), &client.funcStruct.rawText, ImVec2(-1, 60));
+            ImGui::InputTextMultiline(client.makeWidgetName("Message Input").c_str(), &client.funcStruct.rawText, ImVec2(600, 55));
             
             // Send button
             if (ImGui::Button(client.makeWidgetName("Send raw text").c_str())) {
@@ -431,6 +462,40 @@ void RunGui() {
                 }).detach();
             }
 
+            ImGui::SetNextItemWidth(600.0f);
+            ImGui::InputText("Input path for listing directory", &client.funcStruct.pathText);
+            if(ImGui::Button(client.makeWidgetName("List directory").c_str())) {
+                std::thread([&client] {
+                    Message msg;
+                    msg.commandNumber = MessageListFile;
+                    json jsonData;
+                    jsonData["fileName"] = client.funcStruct.pathText;
+                    msg.setJsonData(jsonData);
+                    if (client.sendData(msg)) {
+                        miniConsole.AddLineSuccess("List directory Message sent to %s", client.getPeerIpPort().c_str());
+                    } else {
+                        miniConsole.AddLineError("Failed to send List directory message to %s", client.getPeerIpPort().c_str());
+                    }
+                }).detach();
+            }
+
+            ImGui::SetNextItemWidth(600.0f);
+            ImGui::InputText("Input full-filename to get file", &client.funcStruct.getFileText);
+            if(ImGui::Button(client.makeWidgetName("Get File").c_str())) {
+                std::thread([&client] {
+                    Message msg;
+                    msg.commandNumber = MessageGetFile;
+                    json jsonData;
+                    jsonData["fileName"] = client.funcStruct.getFileText;
+                    msg.setJsonData(jsonData);
+                    if (client.sendData(msg)) {
+                        miniConsole.AddLineSuccess("Get File Message sent to %s", client.getPeerIpPort().c_str());
+                    } else {
+                        miniConsole.AddLineError("Failed to send Get File message to %s", client.getPeerIpPort().c_str());
+                    }
+                }).detach();
+            }
+
             ImGui::SeparatorText("Special action");
 
             if(ImGui::Button(client.makeWidgetName("Shutdown").c_str())) {
@@ -472,11 +537,11 @@ void RunGui() {
     
     // Console Section
     ImGui::SeparatorText("Console");
-    miniConsole.Draw();
+    miniConsole.Draw("Console", true, ImVec2(-1, 640));
     
     // System Info Section
     ImGui::SeparatorText("System");
-    ImGui::Text("Average FPS: %.1f", ImGui::GetIO().Framerate);
+    ImGui::Text("Average FPS: %d", (int) ImGui::GetIO().Framerate);
     
     ImGui::End();
 }
@@ -497,7 +562,11 @@ void ResetDevice();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 ///////////////////////////////////////////////////
 
-int main(void) {
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLine, int nCmdShow) {
+    UNREFERENCED_PARAMETER(hInstance);
+    UNREFERENCED_PARAMETER(hPrevInstance);
+    UNREFERENCED_PARAMETER(lpCmdLine);
+    UNREFERENCED_PARAMETER(nCmdShow);
     if(!CreateDirectoryCrossPlatform(serverTempFolderName)) {
         std::cerr << "Fatal error: Can't create folder for temporary server data\n";
         return -1;

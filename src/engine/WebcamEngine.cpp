@@ -258,21 +258,32 @@ class WebcamEngine::neeko {
     virtual ~neeko() {
         switch(allocated) {
             case 11:    ComSafeRelease(&sinkWriterInput);
+            [[fallthrough]];
             case 10:    ComSafeRelease(&sinkWriter);
+            [[fallthrough]];
             case 9:     ComSafeRelease(&writerAttributes);
+            [[fallthrough]];
             case 8:     ComSafeRelease(&mediaType);
+            [[fallthrough]];
             case 7:     ComSafeRelease(&nativeMediaType);
+            [[fallthrough]];
             case 6:     ComSafeRelease(&sourceReader);
+            [[fallthrough]];
             case 5:     ComSafeRelease(&mediaSource);
+            [[fallthrough]];
             case 4: {
                 for(unsigned int i = 0; i < deviceCount; i++) {
                     ComSafeRelease(&ppDevices[i]);
                 }
                 CoTaskMemFree(ppDevices);
+                [[fallthrough]];
             }
             case 3: ComSafeRelease(&sourceAttributes);
+            [[fallthrough]];
             case 2: MFShutdown();
+            [[fallthrough]];
             case 1: CoUninitialize();
+            [[fallthrough]];
             default: break;
         }
 

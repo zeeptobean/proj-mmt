@@ -14,11 +14,11 @@ Message& Message::operator=(const Message& rhs) {
         binaryDataSize = rhs.binaryDataSize;
         delete[] jsonData;
         jsonData = new char[jsonDataSize+1];
-        memset(jsonData, 0, jsonDataSize);
+        memset(jsonData, 0, jsonDataSize+1);
         memcpy(jsonData, rhs.jsonData, jsonDataSize);
         delete[] binaryData;
         binaryData = new char[binaryDataSize+1];
-        memset(binaryData, 0, binaryDataSize);
+        memset(binaryData, 0, binaryDataSize+1);
         memcpy(binaryData, rhs.binaryData, binaryDataSize);
 
         setSegmentSize();
@@ -36,7 +36,7 @@ void Message::setJsonData(const json& j) {
     std::string jdump = j.dump();
     jsonDataSize = jdump.size(); 
     jsonData = new char[jsonDataSize+1];
-    memset(jsonData, 0, jsonDataSize);
+    memset(jsonData, 0, jsonDataSize+1);
     memcpy(jsonData, jdump.data(), jsonDataSize);
     setSegmentSize();
 }
