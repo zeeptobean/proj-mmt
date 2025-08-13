@@ -185,14 +185,7 @@ int WINAPI ScreenCapEngine::MakeBitmap(char **allocatedJPG, unsigned int* alloca
 
 int ScreenCapHandler(const Message& inputMessage, Message& outputMessage) {
     json outputJson;
-
-    if(inputMessage.commandNumber !=  MessageScreenCap) {
-        outputMessage.commandNumber = MessageScreenCap;
-        outputMessage.returnCode = 0;
-        outputJson["errorString"] = "Wrong command sent?";
-        outputMessage.setJsonData(outputJson);
-        return 0;
-    }
+    if(!preliminaryEngineMessageCheck(MessageScreenCap, inputMessage, outputMessage, outputJson)) return 0;
 
     char *jpgData;
     unsigned int jpgDataSize;

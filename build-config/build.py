@@ -153,12 +153,13 @@ def main():
     print("Linking client...")
     if client_object_file:
         client_exe_path = os.path.join(bin_dir, "client.exe")
-        client_link_objects = engine_object_files + component_object_files + [client_object_file]
+        client_component_objects = [obj for obj in component_object_files if os.path.basename(obj) != "GmailLib.o"]
+        client_link_objects = engine_object_files + client_component_objects + [client_object_file]
         command = [
             compiler, "-mwindows", "-municode", *compiler_flags, *release_flags,
             *client_link_objects,
             "-o", client_exe_path,
-            *imgui_flags, *imgui_linking_flags, *linking_flags
+            *imgui_flags, *imgui_linking_flags, *linking_flags,
         ]
         run_command(command, f"{Colors.CYAN}Linking client{Colors.ENDC}")
     else:
@@ -173,7 +174,8 @@ def main():
             compiler, "-mwindows", "-municode", *compiler_flags, *release_flags,
             *server_link_objects,
             "-o", server_exe_path,
-            *imgui_flags, *imgui_linking_flags, *linking_flags
+            *imgui_flags, *imgui_linking_flags, *linking_flags,
+            "-Wl,-Bdynamic", "-lcurl"            # server also link with curl
         ]
         run_command(command, f"{Colors.CYAN}Linking server{Colors.ENDC}")
     else:

@@ -311,14 +311,7 @@ bool WebcamEngine::run(int millisecond, int fps, std::string *errorString = null
 int InvokeWebcamHandler(const Message& inputMessage, Message& outputMessage) {
     json inputJsonData = json::parse(std::string(inputMessage.getJsonData(), inputMessage.getJsonDataSize()));
     json outputJsonData;
-
-    if(inputMessage.commandNumber !=  MessageInvokeWebcam) {
-        outputMessage.commandNumber = MessageInvokeWebcam;
-        outputMessage.returnCode = 0;
-        outputJsonData["errorString"] = "Wrong command sent?";
-        outputMessage.setJsonData(outputJsonData);
-        return 0;
-    }
+    if(!preliminaryEngineMessageCheck(MessageInvokeWebcam, inputMessage, outputMessage, outputJsonData)) return 0;
 
     WebcamEngine e;
     int millisecond, fps = 0;

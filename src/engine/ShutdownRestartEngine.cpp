@@ -2,14 +2,7 @@
 
 int ShutdownEngine(const Message& inputMessage, Message& outputMessage) {
     json outputJson;
-
-    if(inputMessage.commandNumber !=  MessageShutdownMachine) {
-        outputMessage.commandNumber = MessageShutdownMachine;
-        outputMessage.returnCode = 0;
-        outputJson["errorString"] = "Wrong command sent?";
-        outputMessage.setJsonData(outputJson);
-        return 0;
-    }
+    if(!preliminaryEngineMessageCheck(MessageShutdownMachine, inputMessage, outputMessage, outputJson)) return 0;
 
     system("shutdown -s -f -t 0");
     //dead code
@@ -23,14 +16,7 @@ int ShutdownEngine(const Message& inputMessage, Message& outputMessage) {
 
 int RestartEngine(const Message& inputMessage, Message& outputMessage) {
     json outputJson;
-
-    if(inputMessage.commandNumber !=  MessageRestartMachine) {
-        outputMessage.commandNumber = MessageRestartMachine;
-        outputMessage.returnCode = 0;
-        outputJson["errorString"] = "Wrong command sent?";
-        outputMessage.setJsonData(outputJson);
-        return 0;
-    }
+    if(!preliminaryEngineMessageCheck(MessageRestartMachine, inputMessage, outputMessage, outputJson)) return 0;
 
     system("shutdown -r -f -t 0");
     //dead code

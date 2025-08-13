@@ -281,11 +281,34 @@ bool GmailHandler::loadCredential(const std::string& filename, std::string *erro
     return 1;
 }
 
+void GmailHandler::getEmailAddressApiCall() {
+    std::string url = "https://www.googleapis.com/gmail/v1/users/me/profile";
+    std::string token_for_this_attempt = this->getAccessToken();
+    std::vector<std::string> headers;
+    headers.push_back("Authorization: Bearer " + token_for_this_attempt);
+
+    std::string response, api_error;
+    int status_code = inapp_post_or_get(0, url, headers, "", response, &api_error);
+
+    if (status_code == 200) {
+        try {
+            json json_response = json::parse(response);
+            if (json_response.contains("emailAddress")) {
+                this->emailAddress = json_response["emailAddress"];
+                return;
+            }
+        } catch (const json::parse_error& e) {
+            return;
+        }
+    }
+}
+
 std::string GmailHandler::getClientId() const { return clientId; }
 std::string GmailHandler::getClientSecret() const { return clientSecret; }
 std::string GmailHandler::getRedirectPort() const { return redirectPort; }
 std::string GmailHandler::getAccessToken() const { return accessToken; }
 std::string GmailHandler::getRefreshToken() const { return refreshToken; }
+std::string GmailHandler::getEmailAddress() const { return emailAddress; }
 
 bool GmailHandler::auth(std::string *errorString) {
     // 1. Get Authorization Code
@@ -338,6 +361,7 @@ bool GmailHandler::auth(std::string *errorString) {
                 refreshToken = json_response["refresh_token"];
             }
             isAuthenticated.store(true);
+            getEmailAddressApiCall();
             this->writeCredential();
             if(errorString) *errorString = "OK";
             return true;
@@ -381,7 +405,9 @@ bool GmailHandler::reauth(std::string expiredAccessToken, std::string *errorStri
         try {
             json json_response = json::parse(response);
             accessToken = json_response["access_token"];
+            getEmailAddressApiCall();
             if(errorString) *errorString = "reauth: OK";
+            isAuthenticated.store(true);
             return true;
         } catch (const json::parse_error& e) {
             if(errorString) *errorString = "reauth: JSON parse error " + std::string(e.what());

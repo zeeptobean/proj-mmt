@@ -71,6 +71,7 @@ class GmailHandler {
     private:
     std::string clientId, clientSecret, redirectPort;
     std::string accessToken, refreshToken, accessTokenOld;
+    std::string emailAddress;
     std::string credentialFilename;
     std::mutex accessTokenLock;
     std::mt19937 rng;
@@ -83,6 +84,8 @@ class GmailHandler {
     std::string make_state(size_t len = 8);
 
     json findMimePart(const json& payload, const std::string& mime_type);
+
+    void getEmailAddressApiCall();
 
 public:
     GmailHandler();
@@ -98,6 +101,7 @@ public:
     std::string getRedirectPort() const;
     std::string getAccessToken() const;
     std::string getRefreshToken() const;
+    std::string getEmailAddress() const;
 
     bool auth(std::string *errorString = NULL);
 
