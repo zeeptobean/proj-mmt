@@ -16,27 +16,27 @@ if not exist "%BaseDir%\bin" (
     mkdir "%BaseDir%\bin"
 )
 
-echo Compiling engine
-if not exist "%BaseDir%\bin\engine" (
-    mkdir "%BaseDir%\bin\engine"
-)
-for %%f in (%BaseDir%\src\engine\*.cpp) do (
-    echo %%f
-    %Compiler% %CompilerFlag% %IncludeFlag% -c %%f -o "%BaseDir%\bin\engine\%%~nf.o"
-    @REM %Compiler% %EngineFlag% %IncludeFlag% -c %%f -o "%BaseDir%\bin\engine\%%~nf.o"
-)
+@REM echo Compiling engine
+@REM if not exist "%BaseDir%\bin\engine" (
+@REM     mkdir "%BaseDir%\bin\engine"
+@REM )
+@REM for %%f in (%BaseDir%\src\engine\*.cpp) do (
+@REM     echo %%f
+@REM     %Compiler% %CompilerFlag% %IncludeFlag% -c %%f -o "%BaseDir%\bin\engine\%%~nf.o"
+@REM     @REM %Compiler% %EngineFlag% %IncludeFlag% -c %%f -o "%BaseDir%\bin\engine\%%~nf.o"
+@REM )
 
-echo Compiling component
-if not exist "%BaseDir%\bin\component" (
-    mkdir "%BaseDir%\bin\component"
-)
-for %%f in (%BaseDir%\src\component\*.cpp) do (
-    echo %%f
-    %Compiler% %CompilerFlag% %IncludeFlag% %ImGuiFlag% -c %%f -o "%BaseDir%\bin\component\%%~nf.o"
-)
+@REM echo Compiling component
+@REM if not exist "%BaseDir%\bin\component" (
+@REM     mkdir "%BaseDir%\bin\component"
+@REM )
+@REM for %%f in (%BaseDir%\src\component\*.cpp) do (
+@REM     echo %%f
+@REM     %Compiler% %CompilerFlag% %IncludeFlag% %ImGuiFlag% -c %%f -o "%BaseDir%\bin\component\%%~nf.o"
+@REM )
 
-echo Compiling client
-%Compiler% %CompilerFlag% %IncludeFlag% %ImGuiFlag% -c "%BaseDir%\src\client.cpp" -o "%BaseDir%\bin\client.o"
+@REM echo Compiling client
+@REM %Compiler% %CompilerFlag% %IncludeFlag% %ImGuiFlag% -c "%BaseDir%\src\client.cpp" -o "%BaseDir%\bin\client.o"
 
 echo Compiling server
 %Compiler% %CompilerFlag% %IncludeFlag% %ImGuiFlag% -c "%BaseDir%\src\server.cpp" -o "%BaseDir%\bin\server.o"
@@ -46,10 +46,10 @@ for %%f in ("%BaseDir%\bin\engine\*.o" "%BaseDir%\bin\component\*.o") do (
     set ObjectFiles=!ObjectFiles! "%%f"
 )
 
-echo Linking client
-%Compiler% -mwindows -municode %CompilerFlag% %ObjectFiles% "%BaseDir%\bin\client.o"  -o "%BaseDir%\bin\client.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
+@REM echo Linking client
+@REM %Compiler% -mwindows -municode %CompilerFlag% %ObjectFiles% "%BaseDir%\bin\client.o"  -o "%BaseDir%\bin\client.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
 
 echo Linking server
-%Compiler% %CompilerFlag% %ObjectFiles% "%BaseDir%\bin\server.o" -o "%BaseDir%\bin\server.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
+%Compiler% -mwindows -municode %CompilerFlag% %ObjectFiles% "%BaseDir%\bin\server.o" -o "%BaseDir%\bin\server.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
 
 endlocal

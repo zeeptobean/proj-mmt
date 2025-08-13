@@ -11,8 +11,6 @@ set ImGuiFlag=-I.\%BaseDir%\imgui-win32-dx9\include\ -L.\%BaseDir%\imgui-win32-d
 set ImGuiLinkingFlag=-limgui-win32-dx9  -ld3d9 -ldwmapi -luser32 -lwinmm
 set ReleaseFlag=-s -static -static-libgcc -static-libstdc++
 
-set EngineFlag=-Wall -Wextra -pedantic -Os -march=nehalem 
-
 if not exist "%BaseDir%\bin" (
     mkdir "%BaseDir%\bin"
 )
@@ -24,7 +22,6 @@ if not exist "%BaseDir%\bin\engine" (
 for %%f in (%BaseDir%\src\engine\*.cpp) do (
     echo %%f
     %Compiler% %CompilerFlag% %IncludeFlag% -c %%f -o "%BaseDir%\bin\engine\%%~nf.o"
-    @REM %Compiler% %EngineFlag% %IncludeFlag% -c %%f -o "%BaseDir%\bin\engine\%%~nf.o"
 )
 
 echo Compiling component
@@ -51,6 +48,6 @@ echo Linking client
 %Compiler% -mwindows -municode %ReleaseFlag% %CompilerFlag% %ObjectFiles% "%BaseDir%\bin\client.o"  -o "%BaseDir%\bin\client.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
 
 echo Linking server
-%Compiler% %ReleaseFlag% %CompilerFlag% %ObjectFiles% "%BaseDir%\bin\server.o" -o "%BaseDir%\bin\server.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
+%Compiler% -mwindows -municode %ReleaseFlag% %CompilerFlag% %ObjectFiles% "%BaseDir%\bin\server.o" -o "%BaseDir%\bin\server.exe" %IncludeFlag% %ImGuiFlag% %ImGuiLinkingFlag% %LinkingFlag%
 
 endlocal
