@@ -6,9 +6,13 @@ set BaseDir=..
 set Compiler=g++
 set CompilerFlag=-Wall -Wextra -pedantic -g -march=native
 set IncludeFlag=-I.\%BaseDir%\include\
-set LinkingFlag=-lcurl -lsodium -lws2_32 -lmf -lmfplat -lmfreadwrite -lmfuuid -lshlwapi -lole32 -loleaut32 -lrpcrt4 -lgdi32 -lgdiplus
+set LinkingFlag=-lws2_32 -lmf -lmfplat -lmfreadwrite -lmfuuid -lshlwapi -lole32 -loleaut32 -lrpcrt4 -lgdi32 -lgdiplus
 set ImGuiFlag=-I.\%BaseDir%\imgui-win32-dx9\include\ -L.\%BaseDir%\imgui-win32-dx9\lib\
 set ImGuiLinkingFlag=-limgui-win32-dx9  -ld3d9 -ldwmapi -luser32 -lwinmm
+set CurlFlag=-I.\%BaseDir%\curl\include\ -L.\%BaseDir%\curl\lib\
+set CurlLinkingFlag=-lcurl
+set SodiumFlag=-I.\%BaseDir%\libsodium\include\ -L.\%BaseDir%\libsodium\lib\
+set SodiumLinkingFlag=-lsodium
 
 set EngineFlag=-Wall -Wextra -pedantic -Os -march=native 
 

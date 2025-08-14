@@ -435,10 +435,10 @@ void MailListener() {
                     MessageEnum command = messageStringToEnum(tokenVector[0]);
 
                     if(command == MessageUnknown) {
-                        miniConsole.AddLineWarning("Mail received. From %s. Target machine: %s. Unknown command", mailMsg.from.c_str(), mailMsg.subject.c_str(), ipAddressPort.c_str());
+                        miniConsole.AddLineWarning("Mail received. From %s. Target machine: %s. Unknown command", mailMsg.from.c_str(), ipAddressPort.c_str());
                         return;
                     } else {
-                        miniConsole.AddLineInfo("Mail received. From %s. Target machine: %s. Command:\n%s", mailMsg.from.c_str(), mailMsg.subject.c_str(), ipAddressPort.c_str(), tokenVector[0].c_str());
+                        miniConsole.AddLineInfo("Mail received. From %s. Target machine: %s. Command:\n%s", mailMsg.from.c_str(), ipAddressPort.c_str(), tokenVector[0].c_str());
                     }
 
                     for(int i=0; i < (int) clientVector.size(); i++) {
@@ -539,12 +539,13 @@ void RunGui() {
     if(doGmailFullAuth) {
         if(ImGui::Button("Authenticate Gmail")) {
             std::thread([]() {
+                std::string errorString;
                 isModalBlocking = true;
-                if(gmail.auth()) {
+                if(gmail.auth(&errorString)) {
                     doGmailFullAuth = false;
                     miniConsole.AddLineSuccess("Auth success");
                 } else {
-                    miniConsole.AddLineError("Auth failed");
+                    miniConsole.AddLineError("Auth failed. Error: %s", errorString.c_str());
                 }
                 isModalBlocking = false;
             }).detach();
@@ -552,11 +553,12 @@ void RunGui() {
     } else {
         if(ImGui::Button("Reauthenticate Gmail (automatic)")) {
             std::thread([]() {
+                std::string errorString;
                 isModalBlocking = true;
-                if(gmail.reauth("")) {
+                if(gmail.reauth("", &errorString)) {
                     miniConsole.AddLineSuccess("Re-auth success");
                 } else {
-                    miniConsole.AddLineError("Re-auth failed");
+                    miniConsole.AddLineError("Re-auth failed. Error: %s", errorString.c_str());
                     doGmailFullAuth = true;
                 }
                 isModalBlocking = false;

@@ -4,6 +4,7 @@ import glob
 import argparse
 import shlex
 import time
+import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class Colors:
@@ -40,6 +41,29 @@ def run_command(command, description, cwd=None, quiet=False):
     except FileNotFoundError:
         print(f"{Colors.RED}ERROR: Command not found. Make sure '{command[0]}' is in your PATH.{Colors.ENDC}")
         exit(1)
+        
+def copy_file_impl(source_path: str, destination_path: str, description: str) -> bool:
+    print(f"Copying {description}")
+    if not os.path.exists(source_path):
+        print(f"{Colors.RED}File '{source_path}' does not exist{Colors.ENDC}")
+        return False
+
+    try:
+        shutil.copy2(source_path, destination_path)
+        if os.path.exists(destination_path) and \
+           os.path.getsize(source_path) == os.path.getsize(destination_path):
+            print(f"{Colors.GREEN}Successfully copied {description}{Colors.ENDC}")
+            return True
+        else:
+            print(f"{Colors.RED}{description} copy failed{Colors.ENDC}")
+            return False
+
+    except PermissionError:
+        print(f"{Colors.RED}{description} copy failed{Colors.ENDC}")
+        return False
+    except Exception as e:
+        print(f"{Colors.RED}{description} copy failed{Colors.ENDC}")
+        return False
 
 def main():
     # --- Command-line Argument Parsing ---
@@ -70,9 +94,14 @@ def main():
         compiler_flags = "-Wall -Wextra -pedantic -g -march=native".split()
         release_flags = "".split()
     include_flags = [f"-I{os.path.join(base_dir, 'include')}"]
-    linking_flags = "-lsodium -lws2_32 -lmf -lmfplat -lmfreadwrite -lmfuuid -lshlwapi -lole32 -loleaut32 -lrpcrt4 -lgdi32 -lgdiplus".split()
+    linking_flags = "-lws2_32 -lmf -lmfplat -lmfreadwrite -lmfuuid -lshlwapi -lole32 -loleaut32 -lrpcrt4 -lgdi32 -lgdiplus".split()
     imgui_flags = [f"-I{os.path.join(base_dir, 'imgui-win32-dx9', 'include')}", f"-L{os.path.join(base_dir, 'imgui-win32-dx9', 'lib')}"]
     imgui_linking_flags = "-limgui-win32-dx9 -ld3d9 -ldwmapi -luser32 -lwinmm".split()
+    curl_flags = [f"-I{os.path.join(base_dir, 'curl', 'include')}", f"-L{os.path.join(base_dir, 'curl', 'lib')}"]
+    curl_linking_flags = "-lcurl".split()
+    sodium_flags = [f"-I{os.path.join(base_dir, 'libsodium', 'include')}", f"-L{os.path.join(base_dir, 'libsodium', 'lib')}"]
+    sodium_linking_flags = "-lsodium".split()
+
 
     # --- Create Build Directories ---
     bin_dir = os.path.join(base_dir, "bin")
@@ -106,7 +135,7 @@ def main():
         for src_file in glob.glob(component_src_path):
             object_name = os.path.splitext(os.path.basename(src_file))[0] + ".o"
             output_path = os.path.join(component_bin_dir, object_name)
-            command = [compiler, *compiler_flags, *include_flags, *imgui_flags, "-c", src_file, "-o", output_path]
+            command = [compiler, *compiler_flags, *include_flags, *imgui_flags, *curl_flags, *sodium_flags, "-c", src_file, "-o", output_path]
             print(f"Submitting component file: {os.path.basename(src_file)}")
             future = executor.submit(run_command, command, object_name, quiet=True)
             futures[future] = ("component", output_path)
@@ -114,7 +143,7 @@ def main():
         # BUild Client
         client_src_path = os.path.join(base_dir, "src", "client.cpp")
         client_obj_path = os.path.join(bin_dir, "client.o")
-        command = [compiler, *compiler_flags, *include_flags, *imgui_flags, "-c", client_src_path, "-o", client_obj_path]
+        command = [compiler, *compiler_flags, *include_flags, *imgui_flags, *sodium_flags, "-c", client_src_path, "-o", client_obj_path]
         print("Submitting client")
         future = executor.submit(run_command, command, "client.o", quiet=True)
         futures[future] = ("client", client_obj_path)
@@ -122,7 +151,7 @@ def main():
         # BUild Server
         server_src_path = os.path.join(base_dir, "src", "server.cpp")
         server_obj_path = os.path.join(bin_dir, "server.o")
-        command = [compiler, *compiler_flags, *include_flags, *imgui_flags, "-c", server_src_path, "-o", server_obj_path]
+        command = [compiler, *compiler_flags, *include_flags, *imgui_flags, *curl_flags, *sodium_flags, "-c", server_src_path, "-o", server_obj_path]
         print("Submitting server")
         future = executor.submit(run_command, command, "server.o", quiet=True)
         futures[future] = ("server", server_obj_path)
@@ -161,7 +190,9 @@ def main():
             compiler, "-mwindows", "-municode", *compiler_flags, *release_flags,
             *client_link_objects,
             "-o", client_exe_path,
-            *imgui_flags, *imgui_linking_flags, *linking_flags,
+            *linking_flags,
+            *imgui_flags, *imgui_linking_flags, 
+            *sodium_flags, *sodium_linking_flags, 
         ]
         run_command(command, f"{Colors.CYAN}Linking client{Colors.ENDC}")
     else:
@@ -176,12 +207,19 @@ def main():
             compiler, "-mwindows", "-municode", *compiler_flags, *release_flags,
             *server_link_objects,
             "-o", server_exe_path,
-            *imgui_flags, *imgui_linking_flags, *linking_flags,
-            "-Wl,-Bdynamic", "-lcurl"            # server also link with curl
+            *linking_flags,
+            *imgui_flags, *imgui_linking_flags, 
+            *sodium_flags, *sodium_linking_flags, 
+            "-Wl,-Bdynamic",                        # only link to curl dll file 
+            *curl_flags, *curl_linking_flags, 
         ]
         run_command(command, f"{Colors.CYAN}Linking server{Colors.ENDC}")
     else:
         print("Skipping server linking due to compilation failure.")
+
+    copy_file_impl(os.path.join(base_dir, "curl", "bin", "libcurl-x64.dll"), os.path.join(base_dir, "bin", "libcurl-x64.dll"), "libcurl-x64.dll")
+    copy_file_impl(os.path.join(base_dir, "curl", "bin", "curl-ca-bundle.crt"), os.path.join(base_dir, "bin", "curl-ca-bundle.crt"), "curl-ca-bundle.crt")
+    copy_file_impl(os.path.join(base_dir, "credential.json"), os.path.join(base_dir, "bin", "credential.json"), "credential.json")
 
     duration = time.monotonic() - start_time
     print(f"{Colors.BOLD}{Colors.GREEN}Build process completed successfully in {duration:.3f} seconds{Colors.ENDC}")
