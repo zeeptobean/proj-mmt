@@ -405,9 +405,10 @@ public:
 
 void MailListener() {
     const std::string subject_to_find = "\"[PROJECT-MMT]\""; // Use quotes for exact phrases
+    std::string errorString;
     const int polling_interval_seconds = 15;
-    // On first run, check last 10 mins
-    long long last_check_timestamp = getCurrentUnixTime() - 600;
+    // On first run, check last 5 mins
+    long long last_check_timestamp = getCurrentUnixTime() - 300;
 
     while (true) {
         long long next_check_timestamp = getCurrentUnixTime();
@@ -416,8 +417,9 @@ void MailListener() {
         // Get new messages
         std::vector<std::string> new_message_ids;
         // cout << "timestamp " << last_check_timestamp << ". ";
-        if(gmail.queryMessages(query, new_message_ids)) {
+        if(gmail.queryMessages(query, new_message_ids, &errorString)) {
             // cout << "query success " << new_message_ids.size() << " elements\n";
+            // miniConsole.AddLineInfo("queryMail: %s", errorString.c_str());
             for(const auto& id : new_message_ids) {
                 MailMessage mailMsg;
                 if(!gmail.getEmail(id, mailMsg)) {
@@ -521,7 +523,7 @@ void MailListener() {
             // cout << "query failed\n";
         }
 
-        last_check_timestamp = next_check_timestamp;
+        if(new_message_ids.size() > 0) last_check_timestamp = next_check_timestamp;
         std::this_thread::sleep_for(std::chrono::seconds(polling_interval_seconds));
     }
 }

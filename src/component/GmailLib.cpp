@@ -548,7 +548,7 @@ bool GmailHandler::queryMessages(const std::string& query, std::vector<std::stri
                     messageIds.push_back(msg["id"]);
                 }
             }
-            if(errorString) *errorString = "queryMessage: OK";
+            if(errorString) *errorString = "OK " + std::to_string(messageIds.size()) + " elements";
             return 1;
         } else if(status_code == 401) {
             if(reauth(this->getAccessToken())) {
@@ -558,7 +558,7 @@ bool GmailHandler::queryMessages(const std::string& query, std::vector<std::stri
                 return 0;
             }
         } else {
-            if(errorString) *errorString = "queryMessages: failed error " + std::to_string(status_code);
+            if(errorString) *errorString = "error " + std::to_string(status_code);
             return 0;
         }
     }
