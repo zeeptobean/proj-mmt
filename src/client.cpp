@@ -211,6 +211,7 @@ int MessageExecute(const Message& inputMessage, Message& outputMessage) {
 void RunGui() {
     ImGuiIO& io = ImGui::GetIO(); (void)io;
 
+    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_Once);
     ImGui::Begin("Client", nullptr, ImGuiWindowFlags_None);
     
     ImGui::SeparatorText("Connection Status");
@@ -326,7 +327,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
     // Create application window
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Example", nullptr };
     ::RegisterClassExW(&wc);
-    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"Dear ImGui DirectX9 Example", WS_OVERLAPPEDWINDOW, 100, 100, (int)(1280 * main_scale), (int)(800 * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
+    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"project-mmt SERVER", WS_OVERLAPPEDWINDOW, 100, 100, (int)(1120 * main_scale), (int)(760 * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
 
     // Initialize Direct3D
     if (!CreateDeviceD3D(hwnd))
