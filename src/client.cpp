@@ -177,10 +177,12 @@ int MessageExecute(const Message& inputMessage, Message& outputMessage) {
             return status;
         }
         case MessageShutdownMachine: {
+            connectionManager.disconnect();     //force client disconnect on shutdown
             (void) ShutdownEngine(inputMessage, outputMessage);
             return true;
         }
         case MessageRestartMachine: {
+            connectionManager.disconnect();     //force client disconnect on shutdown
             (void) RestartEngine(inputMessage, outputMessage);
             return true;
         }
@@ -199,6 +201,33 @@ int MessageExecute(const Message& inputMessage, Message& outputMessage) {
                 miniConsole.AddLineInfo("Get file");
             } else {
                 miniConsole.AddLineError("CAn't Get file");
+            }
+            return status;
+        }
+        case MessageListProcess: {
+            int status = ListProcessHandler(inputMessage, outputMessage);
+            if(status) {
+                miniConsole.AddLineInfo("List process");
+            } else {
+                miniConsole.AddLineError("CAn't List process");
+            }
+            return status;
+        }
+        case MessageStartProcess: {
+            int status = StartProcessHandler(inputMessage, outputMessage);
+            if(status) {
+                miniConsole.AddLineInfo("List process");
+            } else {
+                miniConsole.AddLineError("CAn't List process");
+            }
+            return status;
+        }
+        case MessageStopProcess: {
+            int status = StopProcessHandler(inputMessage, outputMessage);
+            if(status) {
+                miniConsole.AddLineInfo("List process");
+            } else {
+                miniConsole.AddLineError("CAn't List process");
             }
             return status;
         }
@@ -327,7 +356,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
     // Create application window
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Example", nullptr };
     ::RegisterClassExW(&wc);
-    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"project-mmt SERVER", WS_OVERLAPPEDWINDOW, 100, 100, (int)(1120 * main_scale), (int)(760 * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
+    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"project-mmt CLIENT", WS_OVERLAPPEDWINDOW, 100, 100, (int)(1120 * main_scale), (int)(760 * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
 
     // Initialize Direct3D
     if (!CreateDeviceD3D(hwnd))

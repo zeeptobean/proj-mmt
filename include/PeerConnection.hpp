@@ -31,6 +31,8 @@ class PeerConnection {
     struct FunctionalityStruct {
         int webcamDurationMs = 2000;
         int webcamFps = 30;
+        int pidToKill = 0;
+        std::string startCmd = "";
         std::string rawText = "";
         std::string pathText = "";
         std::string getFileText = "";

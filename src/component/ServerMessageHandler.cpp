@@ -66,6 +66,34 @@ bool MessageGetFileServerHandler(PeerConnection& client, const std::string& file
     return client.sendData(msg);
 }
 
+bool MessageStartProcessServerHandler(PeerConnection& client, const std::string& emailFrom) {
+    Message msg;
+    msg.commandNumber = MessageStartProcess;
+    json jsonData;
+    jsonData["email"] = emailFrom;
+    msg.setJsonData(jsonData);
+    return client.sendData(msg);
+}
+
+bool MessageStopProcessServerHandler(PeerConnection& client, const std::string& emailFrom) {
+    Message msg;
+    msg.commandNumber = MessageStopProcess;
+    json jsonData;
+    jsonData["email"] = emailFrom;
+    msg.setJsonData(jsonData);
+    return client.sendData(msg);
+}
+
+bool MessageListProcessServerHandler(PeerConnection& client, const std::string& commandLine, const std::string& emailFrom) {
+    Message msg;
+    msg.commandNumber = MessageListProcess;
+    msg.setBinaryData(commandLine.c_str(), commandLine.size());
+    json jsonData;
+    jsonData["email"] = emailFrom;
+    msg.setJsonData(jsonData);
+    return client.sendData(msg);
+}
+
 bool MessageShutdownMachineServerHandler(PeerConnection& client, const std::string& emailFrom) {
     //Special function: just don't send back data
     Message msg;

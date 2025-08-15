@@ -14,9 +14,9 @@ enum MessageEnum {
     MessageListFile,        
     MessageGetFile,         
     MessageDeleteFile,      //unimplemented
-    MessageStartProcess,    //unimplemented
-    MessageStopProcess,     //unimplemented
-    MessageListProcess,     //unimplemented
+    MessageStartProcess,    
+    MessageStopProcess,     
+    MessageListProcess,     
     MessageShutdownMachine,
     MessageRestartMachine,
     MessageInvokePowershell,//unimplemented
@@ -76,6 +76,10 @@ namespace JsonDataHelper {
         } catch(const json::parse_error& e) {
             std::cerr << "JSON error: " << e.what() << std::endl;
         }
+
+        //trim double quote
+        if(filename.back() == '"') filename.pop_back();
+        if(filename.front() == '"') filename.erase(filename.begin());
 
         return filename;
     }
