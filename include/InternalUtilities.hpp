@@ -50,6 +50,22 @@ inline bool StringToWideString(const std::string& str, std::wstring& wstr) {
 }
 #endif
 
+inline void WriteClipboardText(const std::string& text) {
+    if (OpenClipboard(NULL)) {
+        EmptyClipboard();
+        HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, text.size() + 1);
+        if (hMem != NULL) {
+            char* data = static_cast<char*>(GlobalLock(hMem));
+            if (data != NULL) {
+                strcpy_s(data, text.size() + 1, text.c_str());
+                GlobalUnlock(hMem);
+                SetClipboardData(CF_TEXT, hMem);
+            }
+        }
+        CloseClipboard();
+    }
+}
+
 template <class T> void ComSafeRelease(T **ppT)
 {
     if (*ppT) {
