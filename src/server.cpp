@@ -660,9 +660,18 @@ void SortProcessDataGui(std::vector<std::pair<DWORD, std::string>>& vec, const I
     });
 }
 
+///////////////////////////////////////////////// 
+static LPDIRECT3D9              g_pD3D = nullptr;
+static LPDIRECT3DDEVICE9        g_pd3dDevice = nullptr;
+static bool                     g_DeviceLost = false;
+static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
+static D3DPRESENT_PARAMETERS    g_d3dpp = {};
+/////////////////////////////////////////////////
+
 void RunGui() {
-    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_Once);
-    ImGui::Begin("Server Panel", nullptr, ImGuiWindowFlags_NoCollapse);
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(g_d3dpp.BackBufferWidth, g_d3dpp.BackBufferHeight));
+    ImGui::Begin("Server Panel", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
     ImGui::SeparatorText("Gmail");
     if(doGmailFullAuth) {
         if(ImGui::Button("Authenticate Gmail")) {
@@ -899,13 +908,6 @@ void RunGui() {
 }
 
 ServerConnectionManager connectionManager;
-
-/////////////////////////////////////////////////
-static LPDIRECT3D9              g_pD3D = nullptr;
-static LPDIRECT3DDEVICE9        g_pd3dDevice = nullptr;
-static bool                     g_DeviceLost = false;
-static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
-static D3DPRESENT_PARAMETERS    g_d3dpp = {};
 
 // Forward declarations of helper functions
 bool CreateDeviceD3D(HWND hWnd);

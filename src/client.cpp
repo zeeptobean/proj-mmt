@@ -237,11 +237,21 @@ int MessageExecute(const Message& inputMessage, Message& outputMessage) {
     return 0;
 }
 
+///////////////////////////////////////////////////////////////
+static LPDIRECT3D9              g_pD3D = nullptr;
+static LPDIRECT3DDEVICE9        g_pd3dDevice = nullptr;
+static bool                     g_DeviceLost = false;
+static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
+static D3DPRESENT_PARAMETERS    g_d3dpp = {};
+
+/////////////////////////////////////////////////////////////////
+
 void RunGui() {
     ImGuiIO& io = ImGui::GetIO(); (void)io;
 
-    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_Once);
-    ImGui::Begin("Client", nullptr, ImGuiWindowFlags_None);
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(g_d3dpp.BackBufferWidth, g_d3dpp.BackBufferHeight));
+    ImGui::Begin("Client", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
     
     ImGui::SeparatorText("Connection Status");
     if (connectionManager.isActive()) {
@@ -307,12 +317,6 @@ void RunGui() {
 
 /////////////////////////////////////////////////////////////////////////////
 
-static LPDIRECT3D9              g_pD3D = nullptr;
-static LPDIRECT3DDEVICE9        g_pd3dDevice = nullptr;
-static bool                     g_DeviceLost = false;
-static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
-static D3DPRESENT_PARAMETERS    g_d3dpp = {};
-
 // Forward declarations of helper functions
 bool CreateDeviceD3D(HWND hWnd);
 void CleanupDeviceD3D();
@@ -354,9 +358,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
     float main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
 
     // Create application window
-    WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Example", nullptr };
+    WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"project-mmt", nullptr };
     ::RegisterClassExW(&wc);
-    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"project-mmt CLIENT", WS_OVERLAPPEDWINDOW, 100, 100, (int)(1120 * main_scale), (int)(760 * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
+    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"project-mmt CLIENT", WS_OVERLAPPEDWINDOW, 100, 100, (int)(720 * main_scale), (int)(540 * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
 
     // Initialize Direct3D
     if (!CreateDeviceD3D(hwnd))

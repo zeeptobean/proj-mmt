@@ -18,7 +18,7 @@ class Colors:
 
 def run_command(command, description, cwd=None, quiet=False):
     cmd_str = shlex.join(command)
-    print(f"Executing: {cmd_str}")
+    # print(f"(dbg) Executing: {cmd_str}")
     try:
         result = subprocess.run(
             command,
