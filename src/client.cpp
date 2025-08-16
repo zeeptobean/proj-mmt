@@ -251,7 +251,7 @@ void RunGui() {
 
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImVec2(g_d3dpp.BackBufferWidth, g_d3dpp.BackBufferHeight));
-    ImGui::Begin("Client", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+    ImGui::Begin("Client", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
     
     ImGui::SeparatorText("Connection Status");
     if (connectionManager.isActive()) {
@@ -292,7 +292,7 @@ void RunGui() {
 
     if (connectionManager.isActive()) {
         ImGui::SeparatorText("Raw messages received");
-        if (ImGui::BeginChild("GuiRawMessages", ImVec2(-1, 150), true)) {
+        if (ImGui::BeginChild("GuiRawMessages", ImVec2(-1, 30), true)) {
             ImGui::TextWrapped("%s", connectionManager.funcStruct.rawText.c_str());
             if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
                 ImGui::SetScrollHereY(1.0f);

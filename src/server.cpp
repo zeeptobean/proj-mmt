@@ -671,7 +671,7 @@ static D3DPRESENT_PARAMETERS    g_d3dpp = {};
 void RunGui() {
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImVec2(g_d3dpp.BackBufferWidth, g_d3dpp.BackBufferHeight));
-    ImGui::Begin("Server Panel", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+    ImGui::Begin("Server Panel", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
     ImGui::SeparatorText("Gmail");
     if(doGmailFullAuth) {
         if(ImGui::Button("Authenticate Gmail")) {
@@ -991,6 +991,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.5f, 0.4f, 0.1f, 1.0f);       //Dark gold
 
     // Setup Platform/Renderer backends
     ImGui_ImplWin32_Init(hwnd);
