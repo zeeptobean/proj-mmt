@@ -842,6 +842,14 @@ void RunGui() {
                     sort_specs->SpecsDirty = false;
                 }
 
+                for (const auto& item : client.funcStruct.processVec) {
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::Text("%d", item.first);
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::Text("%s", item.second.c_str());
+                }
+
                 ImGui::EndTable();
             }
             ImGui::SetNextItemWidth(150.0f);
