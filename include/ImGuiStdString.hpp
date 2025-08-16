@@ -19,8 +19,6 @@ struct InputTextCallback_UserData
     void*                   ChainCallbackUserData;
 };
 
-static int InputTextCallback(ImGuiInputTextCallbackData* data);
-
 bool ImGui::InputText(const char* label, std::string* str, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* user_data);
 
 bool ImGui::InputTextMultiline(const char* label, std::string* str, const ImVec2& size, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* user_data);

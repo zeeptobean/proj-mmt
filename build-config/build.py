@@ -18,7 +18,7 @@ class Colors:
 
 def run_command(command, description, cwd=None, quiet=False):
     cmd_str = shlex.join(command)
-    # print(f"Executing: {cmd_str}")
+    print(f"Executing: {cmd_str}")
     try:
         result = subprocess.run(
             command,
@@ -202,7 +202,7 @@ def main():
     print("Linking server...")
     if server_object_file:
         server_exe_path = os.path.join(bin_dir, "server.exe")
-        server_link_objects = engine_object_files + component_object_files + [server_object_file]
+        server_link_objects = component_object_files + [server_object_file]
         command = [
             compiler, "-mwindows", "-municode", *compiler_flags, *release_flags,
             *server_link_objects,
@@ -212,6 +212,7 @@ def main():
             *sodium_flags, *sodium_linking_flags, 
             "-Wl,-Bdynamic",                        # only link to curl dll file 
             *curl_flags, *curl_linking_flags, 
+            "-Wl,-Bstatic"                          # switch back to static link
         ]
         run_command(command, f"{Colors.CYAN}Linking server{Colors.ENDC}")
     else:

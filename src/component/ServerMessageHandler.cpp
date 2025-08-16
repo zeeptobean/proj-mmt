@@ -66,28 +66,29 @@ bool MessageGetFileServerHandler(PeerConnection& client, const std::string& file
     return client.sendData(msg);
 }
 
-bool MessageStartProcessServerHandler(PeerConnection& client, const std::string& emailFrom) {
+bool MessageStartProcessServerHandler(PeerConnection& client, const std::string& commandLine, const std::string& emailFrom) {
     Message msg;
     msg.commandNumber = MessageStartProcess;
     json jsonData;
     jsonData["email"] = emailFrom;
     msg.setJsonData(jsonData);
+    msg.setBinaryData(commandLine.c_str(), commandLine.size());
     return client.sendData(msg);
 }
 
-bool MessageStopProcessServerHandler(PeerConnection& client, const std::string& emailFrom) {
+bool MessageStopProcessServerHandler(PeerConnection& client, const int& pid, const std::string& emailFrom) {
     Message msg;
     msg.commandNumber = MessageStopProcess;
     json jsonData;
     jsonData["email"] = emailFrom;
+    jsonData["pid"] = pid;
     msg.setJsonData(jsonData);
     return client.sendData(msg);
 }
 
-bool MessageListProcessServerHandler(PeerConnection& client, const std::string& commandLine, const std::string& emailFrom) {
+bool MessageListProcessServerHandler(PeerConnection& client, const std::string& emailFrom) {
     Message msg;
     msg.commandNumber = MessageListProcess;
-    msg.setBinaryData(commandLine.c_str(), commandLine.size());
     json jsonData;
     jsonData["email"] = emailFrom;
     msg.setJsonData(jsonData);
@@ -95,6 +96,8 @@ bool MessageListProcessServerHandler(PeerConnection& client, const std::string& 
 }
 
 bool MessageShutdownMachineServerHandler(PeerConnection& client, const std::string& emailFrom) {
+    std::string emailFromCopy = emailFrom;
+    UNREFERENCED_PARAMETER(emailFromCopy);
     //Special function: just don't send back data
     Message msg;
     msg.commandNumber = MessageShutdownMachine;
@@ -102,6 +105,8 @@ bool MessageShutdownMachineServerHandler(PeerConnection& client, const std::stri
 }
 
 bool MessageRestartMachineServerHandler(PeerConnection& client, const std::string& emailFrom) {
+    std::string emailFromCopy = emailFrom;
+    UNREFERENCED_PARAMETER(emailFromCopy);
     //Special function: just don't send back data
     Message msg;
     msg.commandNumber = MessageRestartMachine;

@@ -36,6 +36,7 @@ class PeerConnection {
         std::string rawText = "";
         std::string pathText = "";
         std::string getFileText = "";
+        std::vector<std::pair<DWORD, std::string>> processVec;
         bool isKeyloggerActive = false;
         bool isWebcamActive = false;
         bool isControlLocked = false;

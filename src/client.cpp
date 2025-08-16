@@ -216,7 +216,7 @@ int MessageExecute(const Message& inputMessage, Message& outputMessage) {
         case MessageStartProcess: {
             int status = StartProcessHandler(inputMessage, outputMessage);
             if(status) {
-                miniConsole.AddLineInfo("List process");
+                miniConsole.AddLineInfo("Start process");
             } else {
                 miniConsole.AddLineError("CAn't List process");
             }
@@ -225,7 +225,7 @@ int MessageExecute(const Message& inputMessage, Message& outputMessage) {
         case MessageStopProcess: {
             int status = StopProcessHandler(inputMessage, outputMessage);
             if(status) {
-                miniConsole.AddLineInfo("List process");
+                miniConsole.AddLineInfo("Stop process");
             } else {
                 miniConsole.AddLineError("CAn't List process");
             }

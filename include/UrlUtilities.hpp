@@ -14,6 +14,20 @@ inline int64_t getCurrentUnixTime() {
     ).count();
 }
 
+inline std::string trimNameFromEmail(const std::string& tstr) {
+    //trim name, keep email to avoid unicode problems
+    size_t start_pos = tstr.find('<');
+    if (start_pos == std::string::npos) {
+        return tstr;
+    }
+    size_t end_pos = tstr.find('>', start_pos);
+
+    if (end_pos == std::string::npos) {
+        return tstr.substr(start_pos + 1);
+    }
+    return tstr.substr(start_pos + 1, end_pos - (start_pos + 1));
+}
+
 //web-safe base64 encode
 inline std::string base64_encode(const std::string &in) {
     std::string out;

@@ -179,10 +179,16 @@ std::string MailMessage::createMimeMessage() {
 
 void MailMessage::parse(const json& payload) {
     for (const auto& header : payload["headers"]) {
-        if (header["name"] == "From") from = header["value"];
+        if (header["name"] == "From") {
+            from = header["value"];
+            from = trimNameFromEmail(from);
+        }
+        else if (header["name"] == "To") {
+            to = header["value"];
+            to = trimNameFromEmail(to);
+        }
         else if (header["name"] == "Subject") subject = header["value"];
         else if (header["name"] == "Date") date = header["value"];
-        else if (header["name"] == "To") to = header["value"];
     }
 }
 

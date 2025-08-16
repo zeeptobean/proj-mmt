@@ -104,7 +104,7 @@ int ListFilehandler(const Message& inputMessage, Message& outputMessage) {
     while(filename.size() > 0 && filename.back() == '*') {
         filename.pop_back();
     }
-    if(filename.back() == '/') filename.push_back('*');
+    if(filename.back() == '/' || filename.back() == '\\') filename.push_back('*');
     else filename += "/*";
     std::wstring wfilename;
     (void) StringToWideString(filename, wfilename);

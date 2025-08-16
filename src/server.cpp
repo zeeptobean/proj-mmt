@@ -185,6 +185,13 @@ private:
                     json jsonFileListingData = json::parse(std::string(msg.getBinaryData(), msg.getBinaryDataSize()));
                     std::string jsonBeautified = jsonFileListingData.dump(4);
 
+                    this->funcStruct.processVec.clear();
+                    for(auto entry : jsonFileListingData) {
+                        try {
+                            this->funcStruct.processVec.push_back(std::make_pair((DWORD) entry["pid"], (std::string) entry["name"]));
+                        } catch(...) {}
+                    }
+
                     std::string filename = serverTempFolderName + "/listprocesses_" + getCurrentIsoTime() + ".json";
                     std::ofstream outfile(filename, std::ios::out | std::ios::binary);
                     if(!outfile) {
@@ -451,7 +458,7 @@ void MailListener() {
     std::string errorString;
     const int polling_interval_seconds = 15;
     // On first run, check last 2 mins      //for what?
-    long long last_check_timestamp = getCurrentUnixTime() - 120;
+    long long last_check_timestamp = getCurrentUnixTime();
 
     while (true) {
         std::set<std::string> uniqueMessageCheck;
@@ -472,10 +479,31 @@ void MailListener() {
                 if(!gmail.getEmail(id, mailMsg)) {
                     continue;
                 }
-                std::thread([mailMsg] {
+                std::thread([](MailMessage mailMsg) {
                     std::stringstream ss(mailMsg.subject);
                     std::string subjectTag, ipAddressPort, tmpstr;
                     ss >> subjectTag >> ipAddressPort;
+
+                    if(ipAddressPort == "ALL") {
+                        miniConsole.AddLineInfo("Mail received querying list of clients");
+                        mailMsg.body_text.clear();
+                        for(int i=0; i < (int) clientVector.size(); i++) {
+                            mailMsg.body_text += clientVector[i]->getPeerIpPort() + "\n"; 
+                        }
+                        mailMsg.subject = "[PROJECTMMT-REPLY] ALL";
+                        std::wstring tmpMailTo;
+                        (void) StringToWideString(mailMsg.to, tmpMailTo);
+                        std::swap(mailMsg.from, mailMsg.to);
+                        std::string messageIdOnSuccess, errorString;
+                        bool sendMailStatus = gmail.sendEmail(mailMsg.createMimeMessage(), messageIdOnSuccess, &errorString);
+                        if(sendMailStatus) {
+                            miniConsole.AddLineSuccess("Send email to %s success. Message id %s", mailMsg.to.c_str(), messageIdOnSuccess.c_str());
+                        } else {
+                            miniConsole.AddLineError("Send email to %s failed. Error: %s", mailMsg.to.c_str(), errorString.c_str());
+                        }
+                        return;
+                    }
+
                     ss = std::stringstream(mailMsg.body_text);
                     std::vector<std::string> tokenVector;
                     while(ss >> tmpstr) {
@@ -498,7 +526,7 @@ void MailListener() {
                             switch(command) {
                                 case MessageRawText: {
                                     std::string rawText = "";
-                                    for(int i=1; i < tokenVector.size(); i++) {
+                                    for(size_t i=1; i < tokenVector.size(); i++) {
                                         rawText = rawText + tokenVector[i] + " ";
                                     }
                                     status = MessageRawTextServerHandler(*clientVector[i], rawText, mailMsg.from);
@@ -514,13 +542,13 @@ void MailListener() {
                                 }
                                 case MessageInvokeWebcam: {
                                     int millisecond, fps;
-                                    if(tokenVector.size() < 2) {
+                                    if( (int) tokenVector.size() < 2) {
                                         errorString = "webcam millisecond parameter not supplied";
                                         status = 0;
                                         break;
                                     }
                                     millisecond = std::stoi(tokenVector[1]);
-                                    if(tokenVector.size() >= 3) {
+                                    if( (int) tokenVector.size() >= 3) {
                                         fps = std::stoi(tokenVector[2]);
                                     }
                                     status = MessageInvokeWebcamServerHandler(*clientVector[i], millisecond, fps, mailMsg.from);
@@ -532,7 +560,7 @@ void MailListener() {
                                 }
                                 case MessageListFile: {
                                     std::string path;
-                                    if(tokenVector.size() < 2) {
+                                    if( (int) tokenVector.size() < 2) {
                                         errorString = "ListFile path parameter not supplied";
                                         status = 0;
                                         break;
@@ -543,7 +571,7 @@ void MailListener() {
                                 }
                                 case MessageGetFile: {
                                     std::string file;
-                                    if(tokenVector.size() < 2) {
+                                    if( (int) tokenVector.size() < 2) {
                                         errorString = "GetFile file parameter not supplied";
                                         break;
                                     }
@@ -552,19 +580,24 @@ void MailListener() {
                                     break;
                                 }
                                 case MessageStartProcess: {
-                                    status = MessageStartProcessServerHandler(*clientVector[i], mailMsg.from);
+                                    std::string commandLine = "";
+                                    for(int i=1; i < (int) tokenVector.size(); i++) {
+                                        commandLine = commandLine + tokenVector[i] + " ";
+                                    }
+                                    status = MessageStartProcessServerHandler(*clientVector[i], commandLine, mailMsg.from);
                                     break;
                                 }
                                 case MessageStopProcess: {
-                                    status = MessageStopProcessServerHandler(*clientVector[i], mailMsg.from);
+                                    if( (int) tokenVector.size() < 2) {
+                                        errorString = "PID parameter not supplied";
+                                        break;
+                                    }
+                                    int pid = std::stoi(tokenVector[1]);
+                                    status = MessageStopProcessServerHandler(*clientVector[i], pid, mailMsg.from);
                                     break;
                                 }
                                 case MessageListProcess: {
-                                    std::string commandLine = "";
-                                    for(int i=1; i < tokenVector.size(); i++) {
-                                        commandLine = commandLine + tokenVector[i] + " ";
-                                    }
-                                    status = MessageListProcessServerHandler(*clientVector[i], commandLine, mailMsg.from);
+                                    status = MessageListProcessServerHandler(*clientVector[i], mailMsg.from);
                                     break;
                                 }
                                 case MessageShutdownMachine: {
@@ -577,7 +610,7 @@ void MailListener() {
                                 }
                                 default: break;
                             }
-                            if(status) miniConsole.AddLineSuccess("%s from mail success", tokenVector[0].c_str());
+                            if(status) miniConsole.AddLineSuccess("%s from mail ok", tokenVector[0].c_str());
                             else {
                                 miniConsole.AddLineError("%s from mail failed. Error: %s", tokenVector[0].c_str(), errorString.c_str());
                                 sendErrorMail(mailMsg, errorString);
@@ -585,7 +618,7 @@ void MailListener() {
                             break;
                         }
                     }
-                }).detach();
+                }, mailMsg).detach();
                 std::this_thread::sleep_for(std::chrono::seconds(polling_interval_seconds/6));
             }
         } else {
@@ -602,6 +635,30 @@ void MailListener() {
 
 bool doGmailFullAuth = false;
 bool isModalBlocking = false;
+
+void SortProcessDataGui(std::vector<std::pair<DWORD, std::string>>& vec, const ImGuiTableSortSpecs* sort_specs) {
+    if (sort_specs->SpecsCount == 0)
+        return;
+
+    const ImGuiTableColumnSortSpecs* sort_spec = &sort_specs->Specs[0];
+
+    std::sort(vec.begin(), vec.end(), [&](const std::pair<DWORD, std::string>& a, const std::pair<DWORD, std::string>& b) {
+        int compare = 0;
+        switch (sort_spec->ColumnIndex) {
+            case 0: // PID column
+                compare = a.first - b.first;
+                break;
+            case 1: // Name column
+                compare = strcmp(a.second.c_str(), b.second.c_str());
+                break;
+        }
+
+        if (sort_spec->SortDirection == ImGuiSortDirection_Descending)
+            compare = -compare;
+
+        return compare < 0;
+    });
+}
 
 void RunGui() {
     ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_Once);
@@ -762,21 +819,36 @@ void RunGui() {
             }
 
             ImGui::SeparatorText("Process control");
-            if(ImGui::BeginTable(client.makeWidgetName("Process table").c_str(), 2, ImGuiTableFlags_Sortable | ImGuiTableFlags_Borders)) {
+            if(ImGui::Button(client.makeWidgetName("Get running processes").c_str())) {
+                MessageListProcessServerHandler(client, "");
+            }
+            if(ImGui::BeginTable(client.makeWidgetName("Process table").c_str(), 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable | ImGuiTableFlags_Borders)) {
                 ImGui::TableSetupColumn("PID", ImGuiTableColumnFlags_None);
                 ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_None);
                 ImGui::TableHeadersRow();
+
+                ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs();
+                if (sort_specs && sort_specs->SpecsDirty) {
+                    SortProcessDataGui(client.funcStruct.processVec, sort_specs);
+                    sort_specs->SpecsDirty = false;
+                }
+
                 ImGui::EndTable();
             }
             ImGui::SetNextItemWidth(150.0f);
             if(ImGui::InputInt(client.makeWidgetName("PID to kill").c_str(), &client.funcStruct.pidToKill)) {
                 if(client.funcStruct.pidToKill < 0) client.funcStruct.pidToKill = 0;
             }
+            ImGui::SameLine();
+            if(ImGui::Button(client.makeWidgetName("Kill").c_str())) {
+                MessageStopProcessServerHandler(client, client.funcStruct.pidToKill);
+            }
+
             ImGui::SetNextItemWidth(600.0f);
             ImGui::InputText(client.makeWidgetName("Start program command line").c_str(), &client.funcStruct.startCmd);
             ImGui::SameLine();
             if(ImGui::Button(client.makeWidgetName("Start").c_str())) {
-
+                MessageStartProcessServerHandler(client, client.funcStruct.startCmd);
             }
 
             ImGui::SeparatorText("Special action");

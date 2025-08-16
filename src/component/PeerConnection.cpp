@@ -157,7 +157,6 @@ PeerConnection::ReceiveStatus PeerConnection::receiveData() {
     }
 
     const uint8_t* pData = tempBuffer.data();
-    int processedBytes = 0;
 
     if (remainingPayloadSize == 0) {
         const int HEADER_SIZE = 24; // 4 magic + 4 size + 4 reserved + 12 nonce
