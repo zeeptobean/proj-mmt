@@ -350,6 +350,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, WCHAR *lpCmdLi
         return 1;
     }
 
+    //Init sodium
+    (void) sodium_init();
+
     //Setup GUI
     /////////////////////////////////////////////////////
 

@@ -605,11 +605,11 @@ int inapp_post_or_get(int post_or_get, const std::string& url, const std::vector
         if(testCrtFile) {
             testCrtFile.close();
             curl_easy_setopt(curl, CURLOPT_CAINFO, testCrtFilename.c_str());
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
         } else {
             curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
         }
     }
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
 
     // Reset headers for each call
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, NULL);
